@@ -11,6 +11,7 @@ from rich.console import Console
 from VibraVid.utils import config_manager
 from VibraVid.core.manifest.m3u8 import HLSParser
 from VibraVid.core.manifest.mpd import DashParser
+from VibraVid.core.manifest.ism import ISMParser
 from VibraVid.core.manifest.stream import Stream
 from VibraVid.utils.http_client import create_client, get_headers
 from VibraVid.utils.tmdb_client import tmdb_client
@@ -101,6 +102,7 @@ class BaseMediaDownloader:
         self.manifest_type: str = "Unknown"
         self.raw_m3u8: Optional[Path] = None
         self.raw_mpd: Optional[Path] = None
+        self.raw_ism: Optional[Path] = None
         self.status: Optional[dict] = None
 
         self._sv: str = "best"
@@ -148,11 +150,18 @@ class BaseMediaDownloader:
 
         url_lower = self.url.lower().split("?")[0]
         logger.info(f"Parsing manifest: {self.url!r}  auto_select={auto_select}  headers={bool(self.headers)}")
-        parser = (
-            DashParser(self.url, self.headers)
-            if url_lower.endswith((".mpd", ".mpp"))
-            else HLSParser(self.url, self.headers)
-        )
+        parser = None
+
+        if url_lower.endswith((".mpd", ".mpp")):
+            logger.info("Processing URL ending with .mpd or .mpp -- treating as DASH")
+            parser = DashParser(self.url, self.headers)
+        elif url_lower.endswith(".ism") or url_lower.endswith(".ism/manifest"):
+            logger.info("Processing URL ending with .ism or .ism/manifest -- treating as ISM")
+            parser = ISMParser(self.url, self.headers)
+        else:
+            logger.info("Processing URL not ending with .mpd, .mpp, or .ism/manifest -- treating as HLS")
+            parser = HLSParser(self.url, self.headers)
+
         if not parser.fetch_manifest():
             logger.error("BaseMediaDownloader: manifest fetch failed")
             return []
@@ -160,6 +169,9 @@ class BaseMediaDownloader:
         if isinstance(parser, DashParser):
             self.raw_mpd = parser.save_raw(self._tmp_dir)
             self.manifest_type = "DASH"
+        elif isinstance(parser, ISMParser):
+            self.raw_ism = parser.save_raw(self._tmp_dir)
+            self.manifest_type = "ISM"
         else:
             self.raw_m3u8 = parser.save_raw(self._tmp_dir)
             self.manifest_type = "HLS"
@@ -201,7 +213,7 @@ class BaseMediaDownloader:
         return self.streams
 
     def get_metadata(self) -> Tuple[str, str, str]:
-        return (str(self.raw_m3u8), str(self.raw_mpd), "")
+        return (str(self.raw_m3u8), str(self.raw_mpd), str(self.raw_ism))
 
     def get_status(self) -> Dict:
         return self.status or self._build_status([], [])

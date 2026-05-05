@@ -333,6 +333,22 @@ def join_audios(video_path: str, audio_tracks: List[Dict[str, str]], out_path: s
             else:
                 console.print(f'[red]Failed to convert audio TS {audio_path} to M4A')
 
+    valid_audio_tracks = []
+    for audio_track in audio_tracks:
+        audio_path = audio_track.get('path')
+        audio_lang = audio_track.get('name', 'unknown')
+        audio_duration = get_video_duration(audio_path)
+        if audio_duration is None:
+            logger.warning(f"Audio duration is None for file: {audio_path}. Skipping track '{audio_lang}'.")
+            console.print(f'[yellow]    WARN [cyan]Audio lang [red]{audio_lang} [cyan]has no readable duration — [red]skipped.')
+            continue
+        valid_audio_tracks.append(audio_track)
+    audio_tracks = valid_audio_tracks
+
+    if not audio_tracks:
+        logger.warning("join_audios: no valid audio tracks remaining after duration check.")
+        return join_video(video_path, out_path), False, None
+
     for audio_track in audio_tracks:
         audio_path = audio_track.get('path')
         audio_lang = audio_track.get('name', 'unknown')

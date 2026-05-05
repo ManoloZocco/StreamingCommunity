@@ -23,7 +23,7 @@ class GetSerieInfo:
     def __init__(self, url, bearer_token=None, series_name=None):
         """
         Initialize the GetSerieInfo class for scraping Tubi TV series information.
-        
+
         Args:
             - url (str): The URL of the series
             - bearer_token (str, optional): Bearer token for authentication
@@ -34,7 +34,7 @@ class GetSerieInfo:
         self.series_name = series_name
         self.seasons_manager = SeasonManager()
         self.all_episodes_by_season = {}
-        
+
         # Setup headers
         self.headers = get_headers()
         if self.bearer_token:
@@ -52,14 +52,14 @@ class GetSerieInfo:
 
             json_data = response.json()
             episodes_by_season = json_data.get('episodes_by_season', {})
-            
+
             if not episodes_by_season:
                 logger.error("No seasons found in response")
                 return
-            
+
             # Store episodes by season
             self.all_episodes_by_season = episodes_by_season
-            
+
             # Create seasons in SeasonManager
             for season_num in sorted(episodes_by_season.keys(), key=int):
                 self.seasons_manager.add(Season(
@@ -76,7 +76,7 @@ class GetSerieInfo:
     def collect_info_season(self, number_season: int) -> None:
         """
         Retrieve episode information for a specific season.
-        
+
         Args:
             number_season (int): Season number to fetch episodes for
         """
@@ -101,33 +101,40 @@ class GetSerieInfo:
             client.close()
             response.raise_for_status()
             json_data = response.json()
-            
-            # Extract episodes from children
+
             episodes = []
-            for season_data in json_data.get('children', []):
-                for episode in season_data.get('children', []):
+            for season_group in json_data.get('children', []):
+                try:
+                    group_season_num = int(season_group.get('id', -1))
+                except (ValueError, TypeError):
+                    continue
+
+                if group_season_num != number_season:
+                    continue  # skip other seasons
+
+                for episode in season_group.get('children', []):
                     episodes.append(episode)
-            
+
+                break  # found our season group — no need to keep iterating
+
             if not episodes:
                 logger.error(f"No episodes found for season {number_season}")
                 return
-            
+
             # Sort episodes by episode number
-            episodes.sort(key=lambda x: x.get('episode_number', 0))
-            
-            # Transform episodes to match the expected format
+            episodes.sort(key=lambda x: int(x.get('episode_number', 0)))
+
+            # Add episodes to the season object
             for episode in episodes:
 
-                # Get thumbnail
-                thumbnail = ""
+                # Get thumbnail (first entry if available)
                 thumbnails = episode.get('thumbnails', [])
-                if thumbnails and len(thumbnails) > 0:
-                    thumbnail = thumbnails[0]
-                
+                thumbnail = thumbnails[0] if thumbnails else ""
+
                 # Convert duration from seconds to minutes
                 duration_seconds = episode.get('duration', 0)
                 duration_minutes = round(duration_seconds / 60) if duration_seconds else 0
-                
+
                 season.episodes.add(Episode(
                     id=episode.get('id'),
                     name=episode.get('title', f"Episode {episode.get('episode_number')}"),
@@ -137,22 +144,21 @@ class GetSerieInfo:
                     duration=duration_minutes,
                     needs_login=episode.get('needs_login'),
                     country=episode.get('country'),
-                    imdb_id=episode.get('imdb_id')
+                    imdb_id=episode.get('imdb_id'),
                 ))
 
         except Exception as e:
             logger.error(f"Error collecting episodes for season {number_season}: {e}")
             raise
 
-    
     # ------------- FOR GUI -------------
     def getNumberSeason(self) -> int:
         """Get the total number of seasons available for the series."""
         if not self.seasons_manager.seasons:
             self.collect_info_title()
-            
+
         return len(self.seasons_manager.seasons)
-    
+
     def getEpisodeSeasons(self, season_number: int) -> list:
         """Get all episodes for a specific season."""
         season = self.seasons_manager.get_season_by_number(season_number)
@@ -160,8 +166,8 @@ class GetSerieInfo:
         if not season:
             logger.error(f"Season {season_number} not found")
             return []
-            
+
         if not season.episodes.episodes:
             self.collect_info_season(season_number)
-            
+
         return season.episodes.episodes

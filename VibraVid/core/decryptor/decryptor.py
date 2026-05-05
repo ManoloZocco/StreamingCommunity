@@ -22,7 +22,7 @@ class Decryptor:
         logger.debug(f"Initializing Decryptor license_url={license_url!r} drm_type={drm_type!r}")
         self.mp4decrypt_path = get_bento4_decrypt_path()
         self.mp4dump_path = get_mp4dump_path()
-        self.shaka_packager_path  = get_shaka_packager_path()
+        self.shaka_packager_path = get_shaka_packager_path()
         self.ffmpeg_path = get_ffmpeg_path()
         self.license_url = license_url
         self.drm_type = drm_type
@@ -73,10 +73,10 @@ class Decryptor:
 
             method_display = (mode or "unknown").upper()
             filename = os.path.basename(encrypted_path)
-            use_shaka = bool(enc_method and "sample" in enc_method.lower())
+            use_shaka = bool((enc_method and "sample" in enc_method.lower()) or mode == "cbc")
 
-            if use_shaka:
-                label = (f"[cyan]Dec[/cyan] [green]{filename}[/green] [[magenta]{method_display}[/magenta]] - [yellow]Shaka[/yellow]")
+            if use_shaka and self.shaka_packager_path:
+                label = f"[cyan]Dec[/cyan] [green]{filename}[/green] [[magenta]{method_display}[/magenta]] - [yellow]Shaka[/yellow]"
                 ok = decrypt_shaka_nonlive(
                     self.shaka_packager_path,
                     encrypted_path,
@@ -87,9 +87,20 @@ class Decryptor:
                     is_fixed_key=is_zero_kid(kid),
                     progress_cb=progress_cb,
                 )
-            
+            elif use_shaka:
+                logger.warning("CBCS/SAMPLE-AES detected but Shaka Packager not available — falling back to Bento4")
+                label = f"[cyan]Dec[/cyan] [green]{filename}[/green] [[magenta]{method_display}[/magenta]] - [yellow]Bento4[/yellow]"
+                ok = decrypt_bento4_nonlive(
+                    self.mp4decrypt_path,
+                    encrypted_path,
+                    norm_keys,
+                    output_path,
+                    label,
+                    is_fixed_key=is_zero_kid(kid),
+                    progress_cb=progress_cb,
+                )
             else:
-                label = (f"[cyan]Dec[/cyan] [green]{filename}[/green] [[magenta]{method_display}[/magenta]] - [yellow]Bento4[/yellow]")
+                label = f"[cyan]Dec[/cyan] [green]{filename}[/green] [[magenta]{method_display}[/magenta]] - [yellow]Bento4[/yellow]"
                 ok = decrypt_bento4_nonlive(
                     self.mp4decrypt_path,
                     encrypted_path,
@@ -128,7 +139,7 @@ class Decryptor:
 
         method_display = (mode or "unknown").upper()
         filename = os.path.basename(encrypted_path)
-        rich_label = (f"[bold cyan]Dec[/bold cyan] [green]{filename}[/green] [[magenta]{method_display}[/magenta]] - [yellow]Bento4[/yellow]")
+        rich_label = f"[bold cyan]Dec[/bold cyan] [green]{filename}[/green] [[magenta]{method_display}[/magenta]] - [yellow]Bento4[/yellow]"
 
         ok = decrypt_bento4_nonlive(
             self.mp4decrypt_path,
