@@ -83,6 +83,19 @@ class HLSParser:
         if self._injected:
             self.raw_content = self._injected
             return True
+        
+        if self.m3u8_url.startswith("file://"):
+            try:
+                from urllib.request import url2pathname
+                local_path = Path(url2pathname(urlparse(self.m3u8_url).path))
+                self.raw_content = local_path.read_text(encoding="utf-8")
+                self._base_url = local_path.parent.as_uri() + "/"
+                return True
+            except Exception as exc:
+                console.print(f"[red]Failed to read local HLS manifest: {exc}.")
+                logger.error(f"HLSParser: local file read failed: {exc}")
+                return False
+
         try:
             hdrs = dict(self.headers)
             hdrs.setdefault("User-Agent", get_headers().get("User-Agent", ""))
@@ -411,11 +424,39 @@ class HLSParser:
                                 info.kid = kid
                     except (json.JSONDecodeError, TypeError, AttributeError, UnicodeDecodeError, ValueError):
                         is_wv = "edef8ba9" in attrs.lower() or "edef8ba9" in full_uri.lower() or "widevine" in attrs.lower()
-                        is_pr = "9a04f079" in attrs.lower() or "9a04f079" in full_uri.lower() or "playready" in attrs.lower() or "com.microsoft" in attrs.lower()
-                        
+                        is_pr = ("9a04f079" in attrs.lower() or "9a04f079" in full_uri.lower() or "playready" in attrs.lower() or "com.microsoft" in attrs.lower())
+                        if not is_pr and not is_wv:
+                            try:
+                                xml_text = decoded.decode("utf-16-le", errors="ignore")
+                                if "<WRMHEADER" in xml_text or "<KID" in xml_text:
+                                    is_pr = True
+                            except Exception:
+                                pass
+
                         if is_wv:
                             info.set_pssh(b64, "WV")
                         elif is_pr:
+                            try:
+                                xml_text = decoded.decode("utf-16-le", errors="ignore")
+                                if "<WRMHEADER" in xml_text or "<KID" in xml_text:
+                                    import re as _re
+                                    kid_m = _re.search(r'VALUE="([A-Za-z0-9+/=]+)"', xml_text)
+                                    if kid_m:
+                                        kid_b64 = kid_m.group(1)
+                                        kid_bytes = base64.b64decode(kid_b64 + "==")
+                                        if len(kid_bytes) >= 16:
+                                            kid_hex = (
+                                                kid_bytes[3::-1].hex()
+                                                + kid_bytes[5:3:-1].hex()
+                                                + kid_bytes[7:5:-1].hex()
+                                                + kid_bytes[8:10].hex()
+                                                + kid_bytes[10:16].hex()
+                                            )
+                                            info.set_kid(kid_hex)
+                                            logger.info(f"PlayReady WRM Header KID extracted: {kid_hex}")
+                            except Exception as exc:
+                                logger.warning(f"PlayReady WRM KID extraction failed: {exc}")
+                            
                             info.set_pssh(b64, "PR")
                         else:
                             info.set_pssh(b64)

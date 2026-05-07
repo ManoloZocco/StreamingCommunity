@@ -9,7 +9,6 @@ from rich.console import Console
 
 from VibraVid.utils import config_manager, os_manager
 from VibraVid.utils.http_client import get_headers
-from VibraVid.setup import get_wvd_path, get_prd_path
 from VibraVid.core.ui.tracker import download_tracker, context_tracker
 from VibraVid.core.utils.media_players import MediaPlayers
 
@@ -62,7 +61,7 @@ class HLS_Downloader(BaseDownloader):
             - cookies: HTTP cookies for authenticated requests.
             - max_segments: Maximum number of segments to download (for testing). Default: None (all).
         """
-        self.m3u8_url = str(m3u8_url).strip()
+        self.m3u8_url = self._resolve_url(str(m3u8_url).strip())
         self.headers = headers or get_headers()
         self.license_url = str(license_url).strip() if license_url else None
         self.license_headers = license_headers or self.headers
@@ -182,35 +181,34 @@ class HLS_Downloader(BaseDownloader):
         return result
 
     def _fetch_keys(self, drm_psshs: Dict[str, List[Dict]]) -> List[str]:
-        """
-        Dispatch key fetch to DRMManager.
-
-        All DRM type comparisons use plain string literals ('widevine',
-        'playready', 'auto') — never DRMSystem / DRMInfo class attributes.
-        """
-        drm_manager = DRMManager(
-            get_wvd_path(),
-            get_prd_path(),
-            config_manager.config.get_dict("DRM", "widevine", default={}),
-            config_manager.config.get_dict("DRM", "playready", default={}),
-            config_manager.config.get_bool("DRM", "prefer_remote_cdm"),
-        )
-        pref = self.drm_preference  # 'widevine' | 'playready' | 'auto'
+        """Fetch decryption keys based on collected PSSH data and DRM preference."""
+        drm_manager = DRMManager(...)
+        pref = self.drm_preference
         keys = None
 
         if pref in (_WV, "auto") and drm_psshs.get("WV"):
             try:
-                keys = drm_manager.get_wv_keys(drm_psshs["WV"], self.license_url, self.license_certificate, self.license_headers, self.key)
+                keys = drm_manager.get_wv_keys(
+                    drm_psshs["WV"],
+                    self.license_url,
+                    license_certificate=self.license_certificate,
+                    headers=self.license_headers,
+                    key=self.key,
+                )
             except Exception as exc:
                 logger.error(f"Widevine key fetch failed: {exc}")
 
         if not keys and pref in (_PR, "auto") and drm_psshs.get("PR"):
             try:
-                keys = drm_manager.get_pr_keys(drm_psshs["PR"], self.license_url, self.license_headers, self.key)
+                keys = drm_manager.get_pr_keys(
+                    drm_psshs["PR"],
+                    self.license_url,
+                    headers=self.license_headers,
+                    key=self.key,
+                )
             except Exception as exc:
                 logger.error(f"PlayReady key fetch failed: {exc}")
 
-        # Manual key passed directly
         if not keys and self.key:
             keys = [self.key] if isinstance(self.key, str) else list(self.key)
 
