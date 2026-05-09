@@ -5,13 +5,14 @@ import json
 import re
 import shutil
 import logging
+import threading
 from pathlib import Path
 from typing import Dict, List, Optional
 
 from rich.console import Console
 
-from VibraVid.utils import config_manager
-from VibraVid.core.ui.tracker import download_tracker
+from VibraVid.utils import config_manager, os_manager
+from VibraVid.core.ui.tracker import download_tracker, context_tracker
 from VibraVid.core.muxing import join_video, join_audios, join_subtitles, build_hybrid_output, probe_media_file
 from VibraVid.core.muxing.helper.video import get_media_metadata
 from VibraVid.core.muxing.helper.video_hybrid import download_other_tracks
@@ -29,6 +30,30 @@ DEBUG_TRACK_JSON = config_manager.config.get_bool("DEFAULT", "debug_track_json")
 
 
 class BaseDownloader:
+    def __init__(self, output_path: str, temp_suffix: str, **kwargs):
+        """Common initialisation shared by DASH / HLS / ISM sub-classes."""
+        if not output_path:
+            output_path = f"download.{EXTENSION_OUTPUT}"
+            
+        self.output_path = os_manager.get_sanitize_path(output_path)
+        if not self.output_path.endswith(f".{EXTENSION_OUTPUT}"):
+            self.output_path += f".{EXTENSION_OUTPUT}"
+
+        self.filename_base = os.path.splitext(os.path.basename(self.output_path))[0]
+        self.output_dir = os.path.join(
+            os.path.dirname(self.output_path), self.filename_base + temp_suffix
+        )
+        self.file_already_exists = os.path.exists(self.output_path)
+
+        self.download_id = context_tracker.download_id
+        self.site_name = context_tracker.site_name
+
+        self.error = None
+        self.last_merge_result = None
+        self.media_players = None
+        self.copied_subtitles = []
+        self.copied_audios = []
+        self.audio_only = False
 
     @staticmethod
     def _resolve_url(url_or_path: str) -> str:
@@ -43,26 +68,6 @@ class BaseDownloader:
         if path.exists() and path.is_file():
             return path.resolve().as_uri()
         return stripped
-
-    def _extract_season_episode(self, output_path: str) -> tuple:
-        """Extract season and episode numbers from output_path using regex patterns."""
-        season = 0
-        episode = 0
-        
-        # Try to match S##E## or S#E# pattern
-        match = re.search(r'[/\\]S(\d+)[/\\].*?S\d+E(\d+)', output_path)
-        if match:
-            season = int(match.group(1))
-            episode = int(match.group(2))
-            return season, episode
-        
-        # Fallback: try to match just S##E## in filename
-        match = re.search(r'S(\d+)E(\d+)', output_path)
-        if match:
-            season = int(match.group(1))
-            episode = int(match.group(2))
-        
-        return season, episode
 
     def _build_tracks_json(self, streams: list, keys: list, manifest_url: str) -> dict:
         """Build a JSON-serializable dict of selected tracks only."""
@@ -156,37 +161,56 @@ class BaseDownloader:
         result["keys"] = formatted_keys
         return result
 
+    def track_download_start(self, title: str, media_type: str, site: str) -> None:
+        """Fire-and-forget: notify Supabase that a download has started."""
+        def _run():
+            try:
+                from VibraVid.utils.vault.supa import supa_vault
+                if supa_vault:
+                    title_str = (title or "").strip()
+                    media_type_str = (media_type or "Film").strip()
+                    site_str = (site or "").strip().lower()
+                    logger.debug(f"[TRACK] Tracking download: title={title_str}, type={media_type_str}, service={site_str}")
+                    result = supa_vault.track_download(
+                        title=title_str,
+                        media_type=media_type_str,
+                        service=site_str,
+                    )
+                    logger.debug(f"[TRACK] Track result: {result}")
+                else:
+                    logger.warning("[TRACK] supa_vault not initialized (VAULT_URL empty or not configured)")
+            except Exception as e:
+                logger.error(f"[TRACK] Error tracking download: {e}", exc_info=True)
+
+        t = threading.Thread(target=_run, daemon=False)
+        t.start()
+
     def _log_tracks_json(self, streams: list, keys: list, manifest_url: str) -> None:
-        """Emit a TRACKS_JSON logger.info"""
-        from VibraVid.core.ui.tracker import context_tracker
+        """Emit a TRACKS_JSON logger.info and trigger Supabase download tracking."""
         tracks = self._build_tracks_json(streams, keys, manifest_url)
-        
-        # Extract season/episode from output_path if available
-        season, episode = 0, 0
-        output_path = getattr(self, "output_path", "")
-        if output_path:
-            season, episode = self._extract_season_episode(output_path)
-        
-        # Fallback to context_tracker if extraction failed
-        if season == 0:
-            season = context_tracker.season or 0
-        if episode == 0:
-            episode = context_tracker.episode or 0
-        
-        # Determine media type: if season or episode > 0, it's a TV series, otherwise it's a film
+
+        # Read all metadata from context_tracker (populated by tv_download_manager / site_search_manager)
+        season = context_tracker.season or 0
+        episode = context_tracker.episode or 0
+        episode_name = context_tracker.episode_name or ""
         media_type = context_tracker.media_type or "Film"
         if season > 0 or episode > 0:
             media_type = "TV"
-        
+
+        title = context_tracker.title or self.filename_base
+        site  = context_tracker.site_name or getattr(self, "site_name", "") or ""
+
         payload = {
-            "name": context_tracker.title or self.filename_base,
+            "name": title,
             "type": media_type.upper(),
             "season": season,
             "episode": episode,
+            "episode_name": episode_name,
             "tracks": tracks,
         }
         if DEBUG_TRACK_JSON:
             logger.info("TRACKS_JSON\n" + json.dumps(payload, indent=4, ensure_ascii=False))
+        self.track_download_start(title=title, media_type=media_type, site=site)
 
     def _no_media_downloaded(self, status: dict) -> bool:
         """Return True when the download produced absolutely nothing."""

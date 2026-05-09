@@ -99,6 +99,7 @@ python manual.py
 | **HLS**  | HTTP Live Streaming (m3u8)         | [Vedi esempio](../../Test/Downloads/HLS.py)  |
 | **MP4**  | Download diretto MP4               | [Vedi esempio](../../Test/Downloads/MP4.py)  |
 | **DASH** | MPEG-DASH con bypass DRM\*         | [Vedi esempio](../../Test/Downloads/DASH.py) |
+| **ISM** | Smooth Streaming com DRM \*         | [View example](./Test/Downloads/ISM.py) |
 
 > **\*DASH con bypass DRM:** Richiede un CDM (Content Decryption Module) valido L3\L2\L1\SL3000\SL2000. Questo progetto non fornisce né facilita l'ottenimento di CDM. Gli utenti devono assicurarsi di rispettare le leggi vigenti.
 

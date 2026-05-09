@@ -73,25 +73,7 @@ class HLS_Downloader(BaseDownloader):
         self.other_tracks = other_tracks or []
         logger.info(f"Initialized HLS_Downloader with URL: {self.m3u8_url}, License URL: {self.license_url}, DRM Pref: {self.drm_preference}, Max Segments: {self.max_segments}")
 
-        if not output_path:
-            output_path = f"download.{EXTENSION_OUTPUT}"
-        self.output_path = os_manager.get_sanitize_path(output_path)
-        if not self.output_path.endswith(f".{EXTENSION_OUTPUT}"):
-            self.output_path += f".{EXTENSION_OUTPUT}"
-
-        self.filename_base = os.path.splitext(os.path.basename(self.output_path))[0]
-        self.output_dir = os.path.join(os.path.dirname(self.output_path), self.filename_base + "_hls_temp")
-        self.file_already_exists = os.path.exists(self.output_path)
-
-        self.download_id = context_tracker.download_id
-        self.site_name = context_tracker.site_name
-
-        self.error = None
-        self.last_merge_result = None
-        self.media_players = None
-        self.copied_subtitles = []
-        self.copied_audios = []
-        self.audio_only = False
+        super().__init__(output_path, "_hls_temp")
 
     def _collect_drm_from_streams(self, streams: list) -> Dict[str, List[Dict]]:
         """

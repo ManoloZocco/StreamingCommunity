@@ -433,6 +433,9 @@ class ContextTracker:
     def should_print(self) -> bool:
         """Returns False when console output should be suppressed (parallel CLI or GUI)."""
         return not self.is_gui and not self.is_parallel_cli
+    
+    def __str__(self):
+        return f"ContextTracker(download_id={self.download_id}, title={self.title}, site_name={self.site_name}, media_type={self.media_type}, season={self.season}, episode={self.episode}, episode_name={self.episode_name}, is_gui={self.is_gui}, is_parallel_cli={self.is_parallel_cli})"
 
 
 # Global instance

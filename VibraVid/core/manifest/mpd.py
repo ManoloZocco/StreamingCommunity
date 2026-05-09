@@ -11,11 +11,12 @@ from urllib.parse import urljoin, urlparse, urlunparse
 
 from rich.console import Console
 
-from VibraVid.core.manifest.stream import DRMInfo, Segment, Stream
-from VibraVid.utils.http_client import create_client, get_headers
 from VibraVid.utils import config_manager
+from VibraVid.utils.http_client import create_client, get_headers
+from VibraVid.core.manifest.stream import DRMInfo, Segment, Stream
 from VibraVid.core.utils.language import resolve_locale
 from VibraVid.core.utils.codec import DV_CODEC_PREFIXES, detect_stream_type, get_codec_extension, VIDEO_EXTENSIONS, AUDIO_EXTENSIONS, SUBTITLE_EXTENSIONS
+from VibraVid.core.manifest._utils import calc_base_url, save_raw_manifest
 
 
 console = Console()
@@ -167,9 +168,7 @@ class DashParser:
 
     @staticmethod
     def _calc_base_url(url: str) -> str:
-        p = urlparse(url)
-        path = p.path.rsplit("/", 1)[0]
-        return f"{p.scheme}://{p.netloc}{path}/"
+        return calc_base_url(url)
     
     @staticmethod
     def _inherit_query(segment_url: str, source_query: str) -> str:
@@ -242,10 +241,7 @@ class DashParser:
         return {"min_update_period": upd if upd > 0 else 4.0, "is_ended": mpd_type == "static", "availability_start_time": self._root.get("availabilityStartTime", "")}
 
     def save_raw(self, directory: Path) -> Path:
-        path = Path(directory) / "raw.mpd"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(self.raw_content or "", encoding="utf-8")
-        return path
+        return save_raw_manifest(self.raw_content, directory, "raw.mpd")
 
     def parse_streams(self) -> List[Stream]:
         if self._root is None:

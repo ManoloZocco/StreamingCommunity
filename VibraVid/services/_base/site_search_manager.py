@@ -8,6 +8,8 @@ from rich.prompt import Prompt
 
 from VibraVid.utils import TVShowManager
 from VibraVid.services._base import Entries, EntriesManager
+from VibraVid.services._base.site_costant import site_constants
+from VibraVid.core.ui.tracker import context_tracker
 
 
 console = Console()
@@ -172,7 +174,16 @@ def base_process_search_result(select_title: Optional[Entries], download_film_fu
         console.print("[yellow]No title selected or selection cancelled.")
         logger.error("No title selected or selection cancelled.")
         return False
+
+    # Populate context_tracker
+    context_tracker.title = getattr(select_title, 'name', None)
+    context_tracker.media_type = getattr(select_title, 'type', 'Film')
     
+    try:
+        context_tracker.site_name = site_constants.SITE_NAME
+    except Exception:
+        pass
+
     # Handle TV series
     if str(select_title.type).lower() in ['tv', 'serie', 'ova', 'ona', 'show', 'tv short', 'special']:
         if not download_series_func:

@@ -10,10 +10,11 @@ from urllib.parse import urljoin, urlparse
 
 from rich.console import Console
 
-from VibraVid.core.manifest.stream import DRMInfo, Segment, Stream
-from VibraVid.utils.http_client import create_client, get_headers
 from VibraVid.utils import config_manager
+from VibraVid.utils.http_client import create_client, get_headers
+from VibraVid.core.manifest.stream import DRMInfo, Segment, Stream
 from VibraVid.core.utils.language import resolve_locale
+from VibraVid.core.manifest._utils import save_raw_manifest
 
 
 console = Console()
@@ -113,11 +114,7 @@ class ISMParser:
             return False
 
     def save_raw(self, directory: Path) -> Path:
-        """Save the raw manifest text to ``{directory}/raw.ism``."""
-        path = Path(directory) / "raw.ism"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(self.raw_content or "", encoding="utf-8")
-        return path
+        return save_raw_manifest(self.raw_content, directory, "raw.ism")
 
     def parse_streams(self) -> List[Stream]:
         """

@@ -11,10 +11,11 @@ from urllib.parse import urljoin, urlparse
 
 from rich.console import Console
 
-from VibraVid.core.manifest.stream import DRMInfo, Stream
-from VibraVid.utils.http_client import create_client, get_headers
 from VibraVid.utils import config_manager
+from VibraVid.utils.http_client import create_client, get_headers
+from VibraVid.core.manifest.stream import DRMInfo, Stream
 from VibraVid.core.utils.language import resolve_locale
+from VibraVid.core.manifest._utils import calc_base_url, save_raw_manifest
 
 
 logger = logging.getLogger(__name__)
@@ -71,13 +72,7 @@ class HLSParser:
         self.headers = headers or {}
         self._injected = content
         self.raw_content: Optional[str] = content
-        self._base_url = self._calc_base_url(m3u8_url)
-
-    @staticmethod
-    def _calc_base_url(url: str) -> str:
-        p = urlparse(url)
-        path = p.path.rsplit("/", 1)[0]
-        return f"{p.scheme}://{p.netloc}{path}/"
+        self._base_url = calc_base_url(m3u8_url)
 
     def fetch_manifest(self) -> bool:
         if self._injected:
@@ -110,10 +105,7 @@ class HLSParser:
             return False
 
     def save_raw(self, directory: Path) -> Path:
-        path = Path(directory) / "raw.m3u8"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(self.raw_content or "", encoding="utf-8")
-        return path
+        return save_raw_manifest(self.raw_content, directory, "raw.m3u8")
 
     def parse_streams(self) -> List[Stream]:
         if not self.raw_content:
