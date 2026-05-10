@@ -74,6 +74,12 @@ uv run update.py     # aggiorna
 uv sync --upgrade    # aggiorna dipendenze
 ```
 
+### Opzione 4 — Unraid
+
+```
+Puoi trovare l'applicazione nella Community Application
+```
+
 ### Documentazione aggiuntiva
 
 - 📝 [Guida al login](../../.github/doc/login.md) — Autenticazione per i servizi supportati

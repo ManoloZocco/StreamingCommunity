@@ -74,6 +74,12 @@ uv run update.py     # update
 uv sync --upgrade    # sync deps
 ```
 
+### Option 4 — Unraid
+
+```
+You can find the app in the Community Application
+```
+
 ### Additional Documentation
 
 - 📝 [Login Guide](.github/doc/login.md) — Authentication for supported services
