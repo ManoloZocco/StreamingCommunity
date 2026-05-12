@@ -27,6 +27,7 @@ _⚡ **Quick Start:** `pip install VibraVid && VibraVid`_
 - [Usage Examples](#usage-examples)
 - [Global Search](#global-search)
 - [Advanced Features](#advanced-features)
+- [ARR Integration](#arr-integration)
 - [Docker](#docker)
 - [Gui](./.github/docs/en/gui.md)
 - [Related Projects](#related-projects)
@@ -378,6 +379,118 @@ See `VibraVid/core/processors/helper/ex_sub.py` for conversion logic.
 
 ---
 
+### ARR
+
+The `ARR` block enables VibraVid to work as an automation layer between **Seerr/Jellyseerr**, **Sonarr**, **Radarr**, and the final media library.
+
+When enabled, VibraVid can:
+
+- read missing episodes from Sonarr;
+- read missing movies from Radarr;
+- receive webhook events from Seerr/Jellyseerr, Sonarr, and Radarr;
+- download the requested media through VibraVid providers;
+- ask Sonarr/Radarr to rescan or import the downloaded files;
+- optionally mark successfully imported media as unmonitored.
+
+```json
+{
+  "ARR": {
+    "enabled": false,
+    "enable_polling": false,
+    "enable_seerr_webhook": false,
+    "enable_sonarr_webhook": false,
+    "enable_radarr_webhook": false,
+    "polling_interval": 300,
+    "full_resync_interval": 21600,
+    "max_concurrent_downloads": 1,
+    "webhook_priority_enabled": true,
+    "native_webhook_priority_window_seconds": 120,
+    "seerr_fallback_delay_seconds": 20,
+    "seerr_webhook_secret": "",
+    "sonarr_webhook_secret": "",
+    "radarr_webhook_secret": "",
+    "sonarr": {
+      "url": "",
+      "api_key": ""
+    },
+    "radarr": {
+      "url": "",
+      "api_key": ""
+    }
+  }
+}
+```
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `enabled` | `false` | Enables the ARR integration globally |
+| `enable_polling` | `false` | Periodically scans Sonarr/Radarr for missing media |
+| `enable_seerr_webhook` | `false` | Enables the Seerr/Jellyseerr webhook endpoint |
+| `enable_sonarr_webhook` | `false` | Enables the Sonarr webhook endpoint |
+| `enable_radarr_webhook` | `false` | Enables the Radarr webhook endpoint |
+| `polling_interval` | `300` | Seconds between incremental polling cycles |
+| `full_resync_interval` | `21600` | Seconds between full reconciliation syncs |
+| `max_concurrent_downloads` | `1` | Maximum number of ARR-triggered downloads running at the same time |
+| `webhook_priority_enabled` | `true` | Gives native Sonarr/Radarr webhook events priority over Seerr events to avoid duplicate processing |
+| `native_webhook_priority_window_seconds` | `120` | Time window used to detect near-duplicate native webhook events |
+| `seerr_fallback_delay_seconds` | `20` | Delay before processing Seerr webhook events when native Sonarr/Radarr webhooks may arrive |
+| `seerr_webhook_secret` | — | Secret expected in the Seerr/Jellyseerr webhook request |
+| `sonarr_webhook_secret` | — | Secret expected in the Sonarr webhook request |
+| `radarr_webhook_secret` | — | Secret expected in the Radarr webhook request |
+| `sonarr.url` | — | Base URL of the Sonarr instance, e.g. `http://sonarr:8989` |
+| `sonarr.api_key` | — | Sonarr API key |
+| `radarr.url` | — | Base URL of the Radarr instance, e.g. `http://radarr:7878` |
+| `radarr.api_key` | — | Radarr API key |
+
+#### Environment variables
+
+The ARR integration can also be configured with environment variables, useful for Docker deployments:
+
+```bash
+USE_ARR_SERVICES=true
+SONARR_URL=http://sonarr:8989
+SONARR_API_KEY=your-sonarr-api-key
+RADARR_URL=http://radarr:7878
+RADARR_API_KEY=your-radarr-api-key
+SEERR_WEBHOOK_SECRET=your-seerr-secret
+SONARR_WEBHOOK_SECRET=your-sonarr-secret
+RADARR_WEBHOOK_SECRET=your-radarr-secret
+```
+
+Environment variables are especially useful when the same container image is deployed across multiple environments.
+
+#### Tag-based filtering and provider selection
+
+ARR processing can be controlled through tags configured in **Sonarr**, **Radarr**, and, when available in the webhook/request metadata, **Seerr/Jellyseerr**.
+
+Besides skip/hold tags, VibraVid can read a provider-selection tag using this format:
+
+```text
+provider-<vibravid-site-or-service>
+```
+
+The value after `provider-` must match the VibraVid site/service identifier that should be used for the download.
+
+Examples:
+
+```text
+provider-streamingcommunity
+provider-mycustomsite
+```
+
+| Tag | Behaviour |
+|-----|-----------|
+| `hold` | Skips the item temporarily |
+| `pausa` | Skips the item temporarily |
+| `skip-s1` | Skips season 1 of a series |
+| `skip-s2` | Skips season 2 of a series, and so on |
+| `provider-streamingcommunity` | Forces VibraVid to use the `streamingcommunity` provider for that item |
+| `provider-<site>` | Forces VibraVid to use the matching site/service provider for that item |
+
+Provider tags can be assigned directly to the movie in Radarr, to the series in Sonarr, or propagated from Seerr/Jellyseerr request metadata when that metadata is available to the webhook flow. If no provider tag is found, VibraVid falls back to the default configured provider.
+
+---
+
 ### DRM
 
 ```json
@@ -673,6 +786,108 @@ The following are **always preserved** during an update: folders `Video`, `Conf`
 
 ---
 
+## ARR Integration
+
+VibraVid can be used as an automation component in a media-server stack with **Seerr/Jellyseerr**, **Sonarr**, and **Radarr**.
+
+Typical flow:
+
+```text
+Seerr / Jellyseerr
+    ↓ user requests a movie or series
+Sonarr / Radarr
+    ↓ media is added and marked as missing
+VibraVid ARR
+    ↓ detects missing media through polling or webhooks
+VibraVid downloader
+    ↓ searches and downloads through the configured provider or through the provider selected by tag
+Sonarr / Radarr
+    ↓ rescans/imports the downloaded file
+Media library
+    ↓ Jellyfin/Plex can detect the final file
+```
+
+### Supported integrations
+
+| Service | Role |
+|---------|------|
+| **Seerr/Jellyseerr** | Handles user requests and sends approval/pending webhook events |
+| **Sonarr** | Manages TV series, missing episodes, episode metadata, rescans and imports |
+| **Radarr** | Manages movies, missing movie metadata, rescans and imports |
+| **VibraVid** | Searches, downloads and hands files back to Sonarr/Radarr |
+
+### Webhook endpoints
+
+When the GUI/Django server is running, the ARR integration exposes dedicated webhook endpoints:
+
+```text
+POST /api/arr/webhook/seerr/
+POST /api/arr/webhook/sonarr/
+POST /api/arr/webhook/radarr/
+```
+
+Each endpoint can be protected with its own webhook secret. Configure the same secret both in VibraVid and in the corresponding external service.
+
+### Manual and automatic sync
+
+ARR can process media in two ways:
+
+1. **Polling** — VibraVid periodically asks Sonarr/Radarr for wanted or missing media.
+2. **Webhooks** — VibraVid reacts immediately when Seerr, Sonarr or Radarr sends an event.
+
+Both modes can be enabled together. Native Sonarr/Radarr webhooks can be prioritized over Seerr events to reduce duplicate processing.
+
+### Provider selection with tags
+
+To force VibraVid to use a specific site/service for a movie, series or request, add a tag with the following format in Sonarr, Radarr or Seerr/Jellyseerr:
+
+```text
+provider-<vibravid-site-or-service>
+```
+
+For example, `provider-streamingcommunity` tells VibraVid ARR to use the `streamingcommunity` provider for that item. This is useful when different media should be downloaded from different VibraVid providers without changing the global configuration.
+
+If multiple provider tags are present, the ARR processor uses the first valid provider tag it resolves from the item metadata. If no provider tag is found, the default provider is used.
+
+### Sonarr workflow
+
+For series, VibraVid ARR can:
+
+- read missing episodes from Sonarr;
+- resolve series, season and episode metadata;
+- download the requested episode into the expected series path;
+- trigger a Sonarr rescan/import;
+- verify whether the episode was imported;
+- optionally mark the episode as unmonitored after successful import.
+
+### Radarr workflow
+
+For movies, VibraVid ARR can:
+
+- read missing movies from Radarr;
+- resolve title, year and TMDB metadata;
+- download the requested movie into the expected movie path;
+- trigger a Radarr rescan/import;
+- verify whether the movie was imported;
+- optionally mark the movie as unmonitored after successful import.
+
+### Recommended setup
+
+Use shared volumes so VibraVid and Sonarr/Radarr see the same filesystem paths. If containers use different internal paths for the same media folder, imports may fail because Sonarr/Radarr will not find the downloaded files.
+
+Example Docker path layout:
+
+```text
+/media
+├── movies
+├── series
+└── downloads
+```
+
+Mount the same media root into VibraVid, Sonarr and Radarr whenever possible.
+
+---
+
 ## Docker
 
 ### Recommended: Docker Compose
@@ -698,6 +913,21 @@ environment:
   SESSION_COOKIE_SECURE: "true"
   DJANGO_SECRET_KEY: "your-secure-secret-key-here"
 ```
+
+ARR-related variables can be added to the same `environment` block:
+
+```yaml
+environment:
+  USE_ARR_SERVICES: "true"
+  SONARR_URL: "http://sonarr:8989"
+  SONARR_API_KEY: "your-sonarr-api-key"
+  RADARR_URL: "http://radarr:7878"
+  RADARR_API_KEY: "your-radarr-api-key"
+  SEERR_WEBHOOK_SECRET: "your-seerr-secret"
+  SONARR_WEBHOOK_SECRET: "your-sonarr-secret"
+  RADARR_WEBHOOK_SECRET: "your-radarr-secret"
+```
+
 
 ### Manual Docker Build
 

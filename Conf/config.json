@@ -67,5 +67,35 @@
                 "token": ""
             }
         }
+    },
+    "ARR": {
+        "enabled": false,
+        "enable_polling": false,
+        "enable_seerr_webhook": false,
+        "enable_sonarr_webhook": false,
+        "enable_radarr_webhook": false,
+        "polling_interval": 300,
+        "full_resync_interval": 21600,
+        "max_concurrent_downloads": 1,
+        "webhook_priority_enabled": true,
+        "native_webhook_priority_window_seconds": 120,
+        "seerr_fallback_delay_seconds": 20,
+        "sonarr": {
+            "url": "",
+            "api_key": ""
+        },
+        "radarr": {
+            "url": "",
+            "api_key": ""
+        },
+        "seerr": {
+            "webhook_secret": ""
+        },
+        "sonarr_webhook": {
+            "webhook_secret": ""
+        },
+        "radarr_webhook": {
+            "webhook_secret": ""
+        }
     }
 }
