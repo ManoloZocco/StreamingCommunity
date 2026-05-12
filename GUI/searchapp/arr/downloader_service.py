@@ -9,13 +9,11 @@ directly calls the VibraVid internal streaming API (`get_api(site).search()` /
 """
 
 import datetime
-import json
 import logging
 import pathlib
 import time
 from typing import Any, Dict, Optional
 
-from VibraVid.utils.os import os_manager
 from .clients.sonarr_client import SonarrClient
 from .clients.radarr_client import RadarrClient
 
@@ -124,7 +122,6 @@ class ArrDownloaderService:
                     if not series_root:
                         series_root = self._fallback_series_root(title)
                     logger.info(f"[S{season_num}E{ep_num}] Using series root path: '{series_root}'")
-                    season_folder = str(pathlib.Path(series_root).joinpath(f"S{season_num:02d}"))
 
                     # Get the EXACT title and year that the website returned, because VibraVid saves using those
                     result_name = item_payload.get("name", search_title)
@@ -369,7 +366,6 @@ class ArrDownloaderService:
             verify_title = expected_title or title
 
             # Build list of titles to match against
-            titles_to_match = [verify_title] + tmdb_titles
 
             # Scan results: if year matches, accept first result
             best = None

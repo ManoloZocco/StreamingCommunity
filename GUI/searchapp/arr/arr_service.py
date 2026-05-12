@@ -16,7 +16,7 @@ import logging
 import os
 import threading
 import time
-from typing import Any, Dict, List, Optional
+from typing import Optional
 
 from django.db import close_old_connections
 from django.utils import timezone
@@ -466,13 +466,13 @@ def trigger_webhook_sync(event_data: dict) -> int:
         media_type = media.get("media_type", "").lower()  # "movie" or "tv"
         tmdb_id = media.get("tmdbId")
         media_title = media.get("title", "")
-        logger.info(f"[trigger_webhook_sync] Detected Seerr payload format")
+        logger.info("[trigger_webhook_sync] Detected Seerr payload format")
     elif series:
         # Sonarr SeriesAdd payload format
         media_type = "tv"  # Sonarr series events are always TV
         tmdb_id = series.get("tmdbId") or series.get("tvdbId")
         media_title = series.get("title", "")
-        logger.info(f"[trigger_webhook_sync] Detected Sonarr payload format (SeriesAdd)")
+        logger.info("[trigger_webhook_sync] Detected Sonarr payload format (SeriesAdd)")
         # Sonarr passes tmdbId as int, ensure string comparison works
         if tmdb_id is not None:
             tmdb_id = str(tmdb_id)

@@ -21,6 +21,19 @@ from django.views.decorators.csrf import csrf_exempt
 from django.contrib import messages
 from django.utils import timezone
 
+
+from .forms import SearchForm, DownloadForm
+from .models import WatchlistItem
+from .watchlist_auto import _get_interval_seconds
+from GUI.searchapp.api import get_api
+from GUI.searchapp.api.base import Entries
+
+from VibraVid.core.ui.tracker import  download_tracker, context_tracker
+from VibraVid.utils import config_manager
+from VibraVid.utils.tmdb_client import tmdb_client
+from VibraVid.cli.run import execute_hooks
+
+
 logger = logging.getLogger(__name__)
 
 # Track recently processed webhooks to avoid duplicates (tmdbId -> timestamp)
@@ -58,18 +71,6 @@ def _mark_native_webhook_seen(tmdb_id, source: str):
     if not tmdb_id:
         return
     _is_recent_webhook(tmdb_id, source=source, window_seconds=_WEBHOOK_DEDUP_WINDOW, touch=True)
-
-
-from .forms import SearchForm, DownloadForm
-from .models import WatchlistItem
-from .watchlist_auto import _get_interval_seconds
-from GUI.searchapp.api import get_api
-from GUI.searchapp.api.base import Entries
-
-from VibraVid.core.ui.tracker import  download_tracker, context_tracker
-from VibraVid.utils import config_manager
-from VibraVid.utils.tmdb_client import tmdb_client
-from VibraVid.cli.run import execute_hooks
 
 
 download_executor = concurrent.futures.ThreadPoolExecutor(max_workers=10, thread_name_prefix="DownloadWorker")
@@ -560,7 +561,7 @@ def series_detail(request: HttpRequest) -> HttpResponse:
             for ep in season.episodes:
                 ep_dict = ep.__dict__.copy()
                 lang = ep_dict.get("language") or ""
-                ep_dict["language_list"] = [l.strip() for l in lang.split(",") if l.strip()] if lang else []
+                ep_dict["language_list"] = [language.strip() for language in lang.split(",") if language.strip()] if lang else []
                 episodes_data.append(ep_dict)
 
             seasons_data.append({
@@ -1647,7 +1648,7 @@ def sonarr_webhook(request: HttpRequest) -> JsonResponse:
             return JsonResponse({"status": "ok", "message": f"Processing Sonarr event {event_type}"})
 
         elif event_type == "SERIESDELETE":
-            logger.info(f"[SONARR WEBHOOK] Series deleted event ignored (no sync needed)")
+            logger.info("[SONARR WEBHOOK] Series deleted event ignored (no sync needed)")
             webhook_event.processed = True
             webhook_event.save(update_fields=["processed"])
             return JsonResponse({"status": "ok", "message": "SeriesDelete acknowledged, no action needed"})
@@ -1775,7 +1776,7 @@ def arr_status(request: HttpRequest) -> JsonResponse:
     """
     try:
         from .arr.arr_service import _load_arr_config
-        from .models import ArrMediaRequest, ArrWebhookEvent, ArrProcessingQueue
+        from .models import ArrMediaRequest, ArrWebhookEvent
 
         cfg = _load_arr_config()
 
