@@ -116,6 +116,7 @@ class ArrProcessorService:
                 "id": elem["series"]["id"],
                 "tags": elem["series"]["tags"],
                 "year": elem["series"].get("year"),
+                "tmdbId": elem["series"].get("tmdbId"),
                 "seasons": [],
             }
             base.append(serie)

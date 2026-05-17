@@ -131,6 +131,15 @@ LOGGING = {
             "formatter": "verbose",
             "stream": "ext://sys.stderr",
         },
+        "arr_file": {
+            "class": "logging.FileHandler",
+            "formatter": "verbose",
+            "filename": os.path.join(
+                PROJECT_ROOT, ".cache", "arr",
+                __import__("datetime").datetime.now().strftime("arr_%Y%m%d_%H%M%S.log"),
+            ),
+            "encoding": "utf-8",
+        },
     },
     "root": {
         "handlers": ["console"],
@@ -143,8 +152,8 @@ LOGGING = {
             "propagate": False,
         },
         "ARR": {
-            "handlers": ["console"],
-            "level": os.environ.get("DJANGO_LOG_LEVEL", "WARNING"),
+            "handlers": ["console", "arr_file"],
+            "level": "INFO",
             "propagate": False,
         },
     },

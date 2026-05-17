@@ -30,6 +30,7 @@ _⚡ **Quick Start:** `pip install VibraVid && VibraVid`_
 - [ARR Integration](#arr-integration)
 - [Docker](#docker)
 - [Gui](./.github/docs/en/gui.md)
+- [Known Issues](#known-issues)
 - [Related Projects](#related-projects)
 
 ---
@@ -381,16 +382,11 @@ See `VibraVid/core/processors/helper/ex_sub.py` for conversion logic.
 
 ### ARR
 
-The `ARR` block enables VibraVid to work as an automation layer between **Seerr/Jellyseerr**, **Sonarr**, **Radarr**, and the final media library.
+The `ARR` block enables VibraVid to work as an automation layer between **Seerr/Jellyseerr**, **Sonarr**, **Radarr**, and the final media library. When enabled, VibraVid polls Sonarr/Radarr for missing media, receives webhook events, downloads through its provider pipeline, and reports the resulting files back so that Sonarr/Radarr can import them.
 
-When enabled, VibraVid can:
+> **The ARR integration requires the VibraVid web GUI to be running.** All polling loops, webhook listeners, and download workers are managed by the Django application server. The CLI (`vibraNid` / `python -m VibraVid`) does not start the ARR stack.
 
-- read missing episodes from Sonarr;
-- read missing movies from Radarr;
-- receive webhook events from Seerr/Jellyseerr, Sonarr, and Radarr;
-- download the requested media through VibraVid providers;
-- ask Sonarr/Radarr to rescan or import the downloaded files;
-- optionally mark successfully imported media as unmonitored.
+#### Configuration reference
 
 ```json
 {
@@ -406,17 +402,14 @@ When enabled, VibraVid can:
     "webhook_priority_enabled": true,
     "native_webhook_priority_window_seconds": 120,
     "seerr_fallback_delay_seconds": 20,
-    "seerr_webhook_secret": "",
-    "sonarr_webhook_secret": "",
-    "radarr_webhook_secret": "",
-    "sonarr": {
-      "url": "",
-      "api_key": ""
-    },
-    "radarr": {
-      "url": "",
-      "api_key": ""
-    }
+    "download_italian_anime_default": true,
+    "provider_fallback": ["streamingcommunity", "animeunity"],
+    "path_mapping": {},
+    "sonarr": { "url": "", "api_key": "" },
+    "radarr": { "url": "", "api_key": "" },
+    "seerr": { "webhook_secret": "" },
+    "sonarr_webhook": { "webhook_secret": "" },
+    "radarr_webhook": { "webhook_secret": "" }
   }
 }
 ```
@@ -426,68 +419,156 @@ When enabled, VibraVid can:
 | `enabled` | `false` | Enables the ARR integration globally |
 | `enable_polling` | `false` | Periodically scans Sonarr/Radarr for missing media |
 | `enable_seerr_webhook` | `false` | Enables the Seerr/Jellyseerr webhook endpoint |
-| `enable_sonarr_webhook` | `false` | Enables the Sonarr webhook endpoint |
-| `enable_radarr_webhook` | `false` | Enables the Radarr webhook endpoint |
+| `enable_sonarr_webhook` | `false` | Enables the Sonarr native webhook endpoint |
+| `enable_radarr_webhook` | `false` | Enables the Radarr native webhook endpoint |
 | `polling_interval` | `300` | Seconds between incremental polling cycles |
 | `full_resync_interval` | `21600` | Seconds between full reconciliation syncs |
-| `max_concurrent_downloads` | `1` | Maximum number of ARR-triggered downloads running at the same time |
-| `webhook_priority_enabled` | `true` | Gives native Sonarr/Radarr webhook events priority over Seerr events to avoid duplicate processing |
-| `native_webhook_priority_window_seconds` | `120` | Time window used to detect near-duplicate native webhook events |
-| `seerr_fallback_delay_seconds` | `20` | Delay before processing Seerr webhook events when native Sonarr/Radarr webhooks may arrive |
-| `seerr_webhook_secret` | — | Secret expected in the Seerr/Jellyseerr webhook request |
-| `sonarr_webhook_secret` | — | Secret expected in the Sonarr webhook request |
-| `radarr_webhook_secret` | — | Secret expected in the Radarr webhook request |
+| `max_concurrent_downloads` | `1` | Maximum parallel ARR-triggered downloads |
+| `webhook_priority_enabled` | `true` | Native Sonarr/Radarr webhooks take priority over Seerr to avoid duplicates |
+| `native_webhook_priority_window_seconds` | `120` | Dedup window for near-simultaneous webhook events |
+| `seerr_fallback_delay_seconds` | `20` | Delay before processing a Seerr event when a native webhook may follow |
+| `download_italian_anime_default` | `true` | When an anime provider returns both an original and an `(ITA)` dubbed version, prefer the Italian dub |
+| `provider_fallback` | `[]` | Ordered list of providers tried in sequence when the primary provider finds no match. If empty, `streamingcommunity` is the built-in default |
+| `path_mapping` | `{}` | Translates VibraVid host paths to the paths seen by Radarr/Sonarr containers. Leave empty when both services share the same filesystem view |
 | `sonarr.url` | — | Base URL of the Sonarr instance, e.g. `http://sonarr:8989` |
 | `sonarr.api_key` | — | Sonarr API key |
 | `radarr.url` | — | Base URL of the Radarr instance, e.g. `http://radarr:7878` |
 | `radarr.api_key` | — | Radarr API key |
+| `seerr.webhook_secret` | — | Secret expected in Seerr/Jellyseerr webhook requests |
+| `sonarr_webhook.webhook_secret` | — | Secret expected in Sonarr webhook requests |
+| `radarr_webhook.webhook_secret` | — | Secret expected in Radarr webhook requests |
 
-#### Environment variables
+> All ARR settings can also be edited directly from the VibraVid web GUI under **Settings → Configuration editor**, without touching `config.json` manually.
 
-The ARR integration can also be configured with environment variables, useful for Docker deployments:
+These keys can also be set via environment variables (useful in Docker):
 
 ```bash
 USE_ARR_SERVICES=true
 SONARR_URL=http://sonarr:8989
-SONARR_API_KEY=your-sonarr-api-key
+SONARR_API_KEY=your-key
 RADARR_URL=http://radarr:7878
-RADARR_API_KEY=your-radarr-api-key
-SEERR_WEBHOOK_SECRET=your-seerr-secret
-SONARR_WEBHOOK_SECRET=your-sonarr-secret
-RADARR_WEBHOOK_SECRET=your-radarr-secret
+RADARR_API_KEY=your-key
+SEERR_WEBHOOK_SECRET=your-secret
+SONARR_WEBHOOK_SECRET=your-secret
+RADARR_WEBHOOK_SECRET=your-secret
 ```
 
-Environment variables are especially useful when the same container image is deployed across multiple environments.
+#### Webhook setup
 
-#### Tag-based filtering and provider selection
+VibraVid exposes one webhook endpoint per ARR application. Add **one connection only** per app — adding multiple webhooks for the same app causes duplicate processing.
 
-ARR processing can be controlled through tags configured in **Sonarr**, **Radarr**, and, when available in the webhook/request metadata, **Seerr/Jellyseerr**.
+**Radarr** → Settings → Connect → Webhook
 
-Besides skip/hold tags, VibraVid can read a provider-selection tag using this format:
+| Field | Value |
+|-------|-------|
+| URL | `http://<vibravid-host>:<port>/api/arr/webhook/radarr/` |
+| Triggers | On Movie Added, On Movie File Delete |
+| Secret | any value mirrored in `radarr_webhook.webhook_secret` |
 
-```text
-provider-<vibravid-site-or-service>
+**Sonarr** → Settings → Connect → Webhook
+
+| Field | Value |
+|-------|-------|
+| URL | `http://<vibravid-host>:<port>/api/arr/webhook/sonarr/` |
+| Triggers | On Series Add, On Episode File Delete |
+| Secret | any value mirrored in `sonarr_webhook.webhook_secret` |
+
+Then enable in `config.json`:
+```json
+"enable_sonarr_webhook": true,
+"enable_radarr_webhook": true
 ```
 
-The value after `provider-` must match the VibraVid site/service identifier that should be used for the download.
+> Webhooks and polling can be used together: webhooks trigger an immediate download when media is added, polling acts as a safety net for items that arrive without a webhook event.
 
-Examples:
+#### Provider selection
 
-```text
-provider-streamingcommunity
-provider-mycustomsite
-```
+VibraVid determines which provider to use for each item through two mechanisms — you can use one or both.
+
+**Method 1 — Per-item tag (advanced, requires tagging each title)**
+
+Add a tag directly to the movie or series in Sonarr/Radarr using the format `provider-<site>`. VibraVid reads the tag at download time and uses that provider regardless of the fallback list. This is useful when specific titles are only available on a particular service.
+
+Tags are created in Sonarr/Radarr under Settings → Tags, then assigned to individual series or movies from their edit page.
 
 | Tag | Behaviour |
 |-----|-----------|
-| `hold` | Skips the item temporarily |
-| `pausa` | Skips the item temporarily |
-| `skip-s1` | Skips season 1 of a series |
-| `skip-s2` | Skips season 2 of a series, and so on |
-| `provider-streamingcommunity` | Forces VibraVid to use the `streamingcommunity` provider for that item |
-| `provider-<site>` | Forces VibraVid to use the matching site/service provider for that item |
+| `provider-animeunity` | Uses AnimeUnity for that title |
+| `provider-guardaserie` | Uses GuardaSerie for that title |
+| `provider-<site>` | Uses any supported VibraVid site for that title |
+| `hold` / `pausa` | Skips the item until the tag is removed |
+| `skip-s1`, `skip-s2`, … | Skips a specific season of a series |
 
-Provider tags can be assigned directly to the movie in Radarr, to the series in Sonarr, or propagated from Seerr/Jellyseerr request metadata when that metadata is available to the webhook flow. If no provider tag is found, VibraVid falls back to the default configured provider.
+**Method 2 — Global fallback list (recommended, zero per-title configuration)**
+
+Configure `provider_fallback` with an ordered list of providers. VibraVid tries them in sequence and stops at the first that finds a matching title. No tagging required — add as many providers as you want as safety nets.
+
+Recommended full configuration (covers general content, anime, and niche services):
+
+```json
+"provider_fallback": [
+    "streamingcommunity",
+    "animeunity",
+    "guardaserie",
+    "discoveryplus",
+    "discovery",
+    "dmax",
+    "nove",
+    "realtime",
+    "mediasetinfinity",
+    "raiplay",
+    "homegardentv",
+    "foodnetwork",
+    "animeworld",
+    "crunchyroll",
+    "primevideo",
+    "tubitv",
+    "cinezo",
+    "mostraguarda"
+]
+```
+
+If `provider_fallback` is empty or omitted, VibraVid tries `streamingcommunity` only and fails if the title is not found there.
+
+**Italian dub preference (`download_italian_anime_default`)**
+
+When `true`, if the selected provider returns both an original-language version and an `(ITA)` dubbed version of the same title, VibraVid automatically picks the Italian dub. This applies regardless of which method selected the provider.
+
+```json
+"download_italian_anime_default": true
+```
+
+#### Path mapping — essential for split environments
+
+`path_mapping` is one of the most important settings when Radarr/Sonarr run in Docker while VibraVid runs on the host (or vice versa). After a download completes, VibraVid must tell Radarr/Sonarr exactly where the file is so they can import it. If the two services see the same physical folder under different paths, Radarr/Sonarr will receive a path they cannot resolve and the import will fail.
+
+| Setup | `path_mapping` needed? |
+|-------|----------------------|
+| Both on bare metal | No |
+| Both in Docker with identical volume mounts | No |
+| VibraVid on host, ARR stack in Docker | **Yes** |
+| Both in Docker with different volume mounts | **Yes** |
+
+**Example:** VibraVid on the host sees `/media/Media/Film`. Radarr's Docker Compose mounts the same folder at a different path:
+
+```yaml
+volumes:
+  - /media/Media/Film:/media/Film
+  - /media/Media/Anime:/media/Anime
+  - /media/Media/Series:/media/Series
+```
+
+Without `path_mapping`, VibraVid reports `/media/Media/Film/my-movie` to Radarr. Radarr looks for that path inside its container — it does not exist there — and the import fails. With the mapping configured, VibraVid automatically translates the path before every API call:
+
+```json
+"path_mapping": {
+    "/media/Media/Film":   "/media/Film",
+    "/media/Media/Anime":  "/media/Anime",
+    "/media/Media/Series": "/media/Series"
+}
+```
+
+Each key is a prefix as seen by VibraVid; the value is the equivalent prefix inside the Radarr/Sonarr container. Entries are checked in order and the first matching prefix is replaced. Leave `path_mapping` as `{}` when both services share the same filesystem view.
 
 ---
 
@@ -837,18 +918,6 @@ ARR can process media in two ways:
 
 Both modes can be enabled together. Native Sonarr/Radarr webhooks can be prioritized over Seerr events to reduce duplicate processing.
 
-### Provider selection with tags
-
-To force VibraVid to use a specific site/service for a movie, series or request, add a tag with the following format in Sonarr, Radarr or Seerr/Jellyseerr:
-
-```text
-provider-<vibravid-site-or-service>
-```
-
-For example, `provider-streamingcommunity` tells VibraVid ARR to use the `streamingcommunity` provider for that item. This is useful when different media should be downloaded from different VibraVid providers without changing the global configuration.
-
-If multiple provider tags are present, the ARR processor uses the first valid provider tag it resolves from the item metadata. If no provider tag is found, the default provider is used.
-
 ### Sonarr workflow
 
 For series, VibraVid ARR can:
@@ -958,6 +1027,20 @@ docker run -d --name vibravid -p 8000:8000 `
   -v "D:\Video:/app/Video" `
   vibravid
 ```
+
+---
+
+## Known Issues
+
+The following issues are known and are expected to be addressed in upcoming releases. They do not affect the core download functionality but may impact the user experience in specific scenarios.
+
+**Download progress not shown for some providers**
+
+For certain providers the download progress bar in the GUI may not update or may remain at 0% for the duration of the download. The download is still running in the background and will complete normally — the issue is limited to the progress display. This typically affects providers that stream through intermediate layers rather than exposing direct segment URLs.
+
+**Velora Bridge console errors (connection / rate limit)**
+
+During downloads that go through Velora Bridge you may see warnings or errors in the console such as connection timeouts, stream read failures, or retry messages. These are caused by transient network conditions, proxy rate limiting, or per-session connection limits on the provider side. Velora Bridge retries automatically and the download usually completes successfully. If errors persist, check your proxy configuration and ensure the provider is not applying a rate limit to your IP.
 
 ---
 

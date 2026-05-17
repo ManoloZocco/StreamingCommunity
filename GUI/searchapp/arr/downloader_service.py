@@ -9,6 +9,7 @@ directly calls the VibraVid internal streaming API (`get_api(site).search()` /
 """
 
 import datetime
+import json
 import logging
 import pathlib
 import time
@@ -80,7 +81,7 @@ class ArrDownloaderService:
                 display_title = f"{search_title} - S{season_num} E{ep_num}"
                 logger.info(f"⏳ Downloading '{display_title}' via {provider}")
 
-                item_payload = self._search_and_build_payload(
+                item_payload, provider = self._search_with_fallback(
                     search_title, provider,
                     year_range=year_range,
                     expected_title=search_title,
@@ -89,7 +90,7 @@ class ArrDownloaderService:
                     media_type="tv",
                 )
                 if not item_payload:
-                    logger.error(f"✖️ Could not find '{search_title}' on {provider}")
+                    logger.error(f"✖️ Could not find '{search_title}' on any provider")
                     self.last_error = "search_no_results"
                     continue
 
@@ -132,13 +133,13 @@ class ArrDownloaderService:
                     
                     # Update Sonarr's root path for the series to match VibraVid's output folder
                     if vibrativo_folder:
-                        self.sonarr.update_series_path(serie["id"], vibrativo_folder)
+                        self.sonarr.update_series_path(serie["id"], self._translate_path(vibrativo_folder))
 
                     # Rescan series on the new path
                     try:
                         self.sonarr.command_rescan_series(serie["id"])
                         time.sleep(1)
-                        self.sonarr.command_downloaded_episodes_scan(vibrativo_folder)
+                        self.sonarr.command_downloaded_episodes_scan(self._translate_path(vibrativo_folder))
                         logger.info(f"Rescan completed for S{season_num}E{ep_num}")
                     except Exception as scan_exc:
                         logger.warning(f"Rescan failed: {scan_exc}")
@@ -160,8 +161,7 @@ class ArrDownloaderService:
                         any_success = False
                         continue
 
-                    self.sonarr.set_episode_unmonitored([ep_id])
-                    logger.info(f"S{season_num}E{ep_num} of '{title}' completed and unmonitored")
+                    logger.info(f"S{season_num}E{ep_num} of '{title}' completed and imported")
                 except Exception as exc:
                     logger.error(f"S{season_num}E{ep_num} of '{title}' failed: {exc}")
                     self.last_error = str(exc)
@@ -185,8 +185,8 @@ class ArrDownloaderService:
             logger.info(f"'{title}' already in Radarr queue, skipping")
             return False
 
-        # Resolve original title from Radarr
-        original_title = self._resolve_radarr_title(movie_id)
+        # Resolve original title from Radarr (passes tmdb_id for non-ASCII fallback)
+        original_title = self._resolve_radarr_title(movie_id, tmdb_id)
         search_title = original_title or title
 
         year = movie.get("year")
@@ -194,7 +194,7 @@ class ArrDownloaderService:
 
         logger.info(f"⏳ Downloading movie '{search_title}' ({year}) via {provider}")
 
-        item_payload = self._search_and_build_payload(
+        item_payload, provider = self._search_with_fallback(
             search_title, provider,
             year_range=year_range,
             expected_title=search_title,
@@ -203,7 +203,7 @@ class ArrDownloaderService:
             media_type="movie",
         )
         if not item_payload:
-            logger.error(f"Could not find movie '{search_title}' on {provider}")
+            logger.error(f"Could not find movie '{search_title}' on any provider")
             self.last_error = "search_no_results"
             return False
 
@@ -231,22 +231,86 @@ class ArrDownloaderService:
             if not movie_root:
                 movie_root = self._fallback_movie_root(title)
 
-            # Get the EXACT title and year that the website returned
+            # Get the EXACT title, year and slug that the website returned
             result_name = item_payload.get("name", search_title)
             result_year = item_payload.get("year", year)
+            result_slug = (item_payload.get("slug", "") or "").strip()
 
-            # VibraVid's actual output folder (from Radarr's perspective)
-            vibrativo_folder = self._get_vibrativo_movie_output(movie_root, result_name, result_year)
-            
-            # Update Radarr's root path for the movie
+            # For providers that name folders by slug (animeunity, animeworld),
+            # _get_vibrativo_movie_output would compute the wrong path.
+            # We search for the slug folder instead — read-only, no permission issues.
+            _anime_providers = {"animeunity", "animeworld"}
+            if provider in _anime_providers and result_slug:
+                _conf_path = pathlib.Path(__file__).parent.parent.parent.parent / "Conf" / "config.json"
+                try:
+                    with open(_conf_path, encoding="utf-8") as _f:
+                        _full_cfg = json.load(_f)
+                    _base = _full_cfg.get("OUTPUT", {}).get("root_path", "")
+                    _movie_dir = _full_cfg.get("OUTPUT", {}).get("movie_folder_name", "Film")
+                    _anime_dir = _full_cfg.get("OUTPUT", {}).get("anime_folder_name", "Anime")
+                    _ext = _full_cfg.get("PROCESS", {}).get("extension", "mkv")
+                except Exception:
+                    _base, _movie_dir, _anime_dir, _ext = "", "Film", "Anime", "mkv"
+
+                _candidates = [
+                    pathlib.Path(_base) / _movie_dir / result_slug,
+                    pathlib.Path(_base) / _anime_dir / result_slug,
+                    pathlib.Path(_base) / result_slug,
+                    pathlib.Path(movie_root).parent / result_slug if movie_root else None,
+                ]
+                found_dir = None
+                for _cand in _candidates:
+                    if _cand is None:
+                        continue
+                    if (_cand / f"{result_slug}.{_ext}").exists():
+                        found_dir = _cand
+                        logger.info(f"[anime_path] Slug folder found: '{_cand}'")
+                        break
+
+                if found_dir:
+                    import re as _re
+                    # Build clean name from result_name: strip lang tags + accents
+                    _lang_stripped = _re.sub(
+                        r'\s*\((?:ITA|ENG|SUB|DUB|DUAL|JAP|JP|IT|EN|FR|DE|ES)\)\s*$',
+                        '', result_name, flags=_re.IGNORECASE
+                    ).strip()
+                    _clean = self._strip_accents(_lang_stripped).strip()
+                    _yr = year or result_year
+                    _yr_str = str(_yr).split("-")[0].strip() if _yr else ""
+                    _clean_folder = f"{_clean} ({_yr_str})" if _yr_str else _clean
+
+                    _new_dir = found_dir.parent / _clean_folder
+                    _old_file = found_dir / f"{result_slug}.{_ext}"
+                    _new_file = _new_dir / f"{_clean_folder}.{_ext}"
+
+                    if not _new_dir.exists() and _old_file.exists():
+                        try:
+                            found_dir.rename(_new_dir)
+                            (_new_dir / f"{result_slug}.{_ext}").rename(_new_file)
+                            logger.info(f"[anime_path] Renamed '{found_dir.name}' → '{_new_dir.name}'")
+                            vibrativo_folder = str(_new_dir)
+                        except Exception as _rename_exc:
+                            logger.warning(f"[anime_path] Rename failed: {_rename_exc}, using slug folder")
+                            vibrativo_folder = str(found_dir)
+                    elif _new_dir.exists():
+                        vibrativo_folder = str(_new_dir)
+                    else:
+                        vibrativo_folder = str(found_dir)
+                else:
+                    vibrativo_folder = ""
+                    logger.warning(f"[anime_path] Slug folder not found for '{result_slug}'")
+            else:
+                vibrativo_folder = self._get_vibrativo_movie_output(movie_root, result_name, result_year)
+
+            # Update Radarr's path to wherever the file now is
             if vibrativo_folder:
-                self.radarr.update_movie_path(movie_id, vibrativo_folder)
+                self.radarr.update_movie_path(movie_id, self._translate_path(vibrativo_folder))
 
             # Rescan movie on the new path
             try:
                 self.radarr.command_rescan_movie(movie_id)
                 time.sleep(1)
-                self.radarr.command_downloaded_movies_scan(vibrativo_folder)
+                self.radarr.command_downloaded_movies_scan(self._translate_path(vibrativo_folder))
                 logger.info(f"Rescan completed for '{title}'")
             except Exception as scan_exc:
                 logger.warning(f"Rescan failed: {scan_exc}")
@@ -267,8 +331,7 @@ class ArrDownloaderService:
                 self.last_error = "import_not_confirmed"
                 return False
 
-            self.radarr.set_movie_unmonitored(movie_id)
-            logger.info(f"'{title}' completed and unmonitored")
+            logger.info(f"'{title}' completed and imported")
             return True
         except Exception as exc:
             logger.error(f"'{title}' failed: {exc}")
@@ -277,6 +340,63 @@ class ArrDownloaderService:
             return False
 
     # ── helpers ──────────────────────────────────────────
+
+    @staticmethod
+    def _translate_path(path: str) -> str:
+        """Translate a VibraVid host path to the equivalent path inside Radarr/Sonarr Docker containers.
+
+        Reads path_mapping from ARR config. Each entry maps a host prefix to a container prefix.
+        Example: {"/media/Media/Film": "/media/Film"}
+        """
+        if not path:
+            return path
+        conf_path = pathlib.Path(__file__).parent.parent.parent.parent / "Conf" / "config.json"
+        try:
+            with open(conf_path, encoding="utf-8") as _f:
+                mapping: dict = json.load(_f).get("ARR", {}).get("path_mapping", {})
+        except Exception:
+            return path
+        for host_prefix, container_prefix in mapping.items():
+            if path.startswith(host_prefix):
+                translated = container_prefix + path[len(host_prefix):]
+                logger.info(f"[path_map] '{path}' → '{translated}'")
+                return translated
+        return path
+
+    @staticmethod
+    def _strip_accents(text: str) -> str:
+        """Replace accented characters with their ASCII base: à→a, è→e, ì→i, ò→o, ù→u, etc."""
+        import unicodedata
+        return "".join(
+            c for c in unicodedata.normalize("NFKD", text)
+            if unicodedata.category(c) != "Mn"  # Mn = combining marks (the accent part)
+        )
+
+    @staticmethod
+    def _titles_are_compatible(search_title: str, result_name: str) -> bool:
+        """Check that result_name shares enough significant words with search_title.
+
+        Guards against accepting completely unrelated titles that happen to match
+        the year range (e.g. 'My Teacher' when searching 'My Hero Academia').
+        Requires at least 50% of the significant words (>3 chars) in the search
+        title to appear in the result title. If the search has no significant
+        words, the check is skipped and True is returned.
+        """
+        import re
+
+        def sig_words(s: str):
+            s = ArrDownloaderService._strip_accents(s)
+            return {w.lower() for w in re.split(r'\W+', s) if len(w) > 3}
+
+        sw = sig_words(search_title)
+        if not sw:
+            # Non-ASCII title (e.g. Japanese/Korean) — can't verify by word match,
+            # reject to force TMDB ID check or fallback providers
+            return False
+        rw = sig_words(result_name)
+        overlap = sw & rw
+        ratio = len(overlap) / len(sw)
+        return ratio >= 0.5
 
     @staticmethod
     def _verify_title_match(result_name: str, expected_title: str,
@@ -314,6 +434,58 @@ class ArrDownloaderService:
 
         return False
 
+    def _search_with_fallback(
+        self,
+        title: str,
+        primary_provider: str,
+        **kwargs,
+    ) -> tuple[Optional[Dict[str, Any]], str]:
+        """Try primary_provider first, then the fallback list from ARR config.
+
+        Returns (payload, used_provider). payload is None if nothing found anywhere.
+        """
+        logger.info(f"[fallback] Search '{title}' — primary provider: {primary_provider}")
+
+        payload = self._search_and_build_payload(title, primary_provider, **kwargs)
+        if payload:
+            logger.info(
+                f"[fallback] Found on primary '{primary_provider}': "
+                f"name='{payload.get('name')}' year={payload.get('year')}"
+            )
+            logger.debug(f"[fallback] Payload dump: {json.dumps(payload, default=str, ensure_ascii=False)}")
+            return payload, primary_provider
+
+        logger.warning(f"[fallback] '{title}' not found on '{primary_provider}', trying fallback list")
+
+        conf_path = pathlib.Path(__file__).parent.parent.parent.parent / "Conf" / "config.json"
+        try:
+            with open(conf_path, encoding="utf-8") as _f:
+                fallback_list: list = json.load(_f).get("ARR", {}).get("provider_fallback", [])
+        except Exception as _exc:
+            logger.warning(f"[fallback] Could not read provider_fallback from config: {_exc}")
+            fallback_list = []
+
+        if not fallback_list:
+            logger.warning("[fallback] provider_fallback not configured in ARR config — giving up")
+            return None, primary_provider
+
+        for provider in fallback_list:
+            if provider == primary_provider:
+                continue
+            logger.info(f"[fallback] Trying '{provider}' for '{title}'")
+            payload = self._search_and_build_payload(title, provider, **kwargs)
+            if payload:
+                logger.info(
+                    f"[fallback] Found on fallback '{provider}': "
+                    f"name='{payload.get('name')}' year={payload.get('year')}"
+                )
+                logger.debug(f"[fallback] Payload dump: {json.dumps(payload, default=str, ensure_ascii=False)}")
+                return payload, provider
+            logger.warning(f"[fallback] '{title}' not found on '{provider}' either")
+
+        logger.error(f"[fallback] '{title}' not found on any provider (tried: {primary_provider} + {fallback_list})")
+        return None, primary_provider
+
     def _search_and_build_payload(self, title: str, provider: str,
                                   year_range: Optional[str] = None,
                                   expected_title: Optional[str] = None,
@@ -345,12 +517,27 @@ class ArrDownloaderService:
                 except Exception as tmdb_exc:
                     logger.debug(f"Failed to get TMDB alternative titles: {tmdb_exc}")
 
-            # Search using the title
-            results = api.search(title)
+            # Strip accents from search query: à→a, è→e, ì→i, ò→o, ù→u …
+            search_query = self._strip_accents(title).strip()
+            if search_query != title:
+                logger.info(f"[search] Stripped accents: '{title}' → '{search_query}'")
+
+            logger.info(
+                f"[search] provider='{provider}' query='{search_query}' "
+                f"expected_tmdb={tmdb_id} year_range={year_range}"
+            )
+
+            # Search using the normalized title
+            results = api.search(search_query)
 
             if not results:
-                logger.warning(f"No search results for '{title}' on {provider}")
+                logger.warning(f"[search] No results for '{search_query}' on '{provider}'")
                 return None
+
+            logger.info(f"[search] {len(results)} result(s) from '{provider}' for '{search_query}':")
+            for i, r in enumerate(results[:5]):
+                r_tmdb = getattr(r, 'tmdb_id', None) or 'N/A'
+                logger.info(f"[search]   [{i}] '{r.name}' ({r.year}) type={r.type} tmdb_id={r_tmdb}")
 
             # Parse year range into integers
             year_start = None
@@ -361,53 +548,136 @@ class ArrDownloaderService:
                     year_start = int(parts[0])
                     year_end = int(parts[1])
                 except (ValueError, IndexError):
-                    logger.debug(f"Could not parse year_range '{year_range}'")
+                    logger.debug(f"[search] Could not parse year_range '{year_range}'")
 
-            verify_title = expected_title or title
+            expected_tmdb_str = str(tmdb_id) if tmdb_id else ""
 
-            # Build list of titles to match against
-
-            # Scan results: if year matches, accept first result
             best = None
             for r in results:
-                # Year range check
-                if year_start is not None and year_end is not None:
-                    if not r.year:
+                r_name = r.name or ""
+                r_year = r.year or ""
+                r_tmdb = str(getattr(r, 'tmdb_id', '') or '')
+
+                # ── TMDB ID check (highest priority) ──────────────────────
+                if expected_tmdb_str and r_tmdb:
+                    if r_tmdb != expected_tmdb_str:
+                        logger.warning(
+                            f"[tmdb_check] SKIP '{r_name}' ({r_year}) — "
+                            f"tmdb_id mismatch: got={r_tmdb} expected={expected_tmdb_str}"
+                        )
                         continue
+                    best = r
+                    logger.info(f"[tmdb_check] MATCH '{r_name}' ({r_year}) — tmdb_id={r_tmdb} ✓")
+                    break
+
+                # ── Title compatibility check ──────────────────────────────
+                if not self._titles_are_compatible(title, r_name):
+                    logger.warning(
+                        f"[title_check] SKIP '{r_name}' ({r_year}) — "
+                        f"title too different from '{title}'"
+                    )
+                    continue
+
+                # ── Year range check ──────────────────────────────────────
+                if year_start is not None and year_end is not None:
+                    if not r_year:
+                        # No year on result but title matches well — accept it
+                        best = r
+                        logger.info(
+                            f"[search] ACCEPT '{r_name}' (no year) — "
+                            f"title match, year unverifiable"
+                        )
+                        break
                     try:
-                        r_year = int(r.year)
-                        if not (year_start <= r_year <= year_end):
+                        if not (year_start <= int(r_year) <= year_end):
+                            logger.debug(
+                                f"[search] SKIP '{r_name}' ({r_year}) — "
+                                f"year out of range [{year_start}-{year_end}]"
+                            )
                             continue
                     except (ValueError, TypeError):
                         continue
 
-                # Accept this result (year matches)
                 best = r
-                logger.info(f"Accepted: '{r.name}' ({r.year}) - year matches")
+                logger.info(
+                    f"[search] ACCEPT '{r_name}' ({r_year}) — "
+                    f"title+year match (no tmdb_id to verify)"
+                )
                 break
 
-            # Fallback: if year matches, accept first result (handles translations)
+            # Last-chance fallback: first title-compatible result
             if best is None and results:
                 first = results[0]
-                if first.year:
-                    try:
-                        r_year = int(first.year)
-                        if year_start is None or year_end is None or (year_start <= r_year <= year_end):
-                            best = first
-                            logger.info(f"Accepted first result by year match: '{first.name}' ({first.year})")
-                    except (ValueError, TypeError):
-                        pass
+                f_tmdb = str(getattr(first, 'tmdb_id', '') or '')
+                if expected_tmdb_str and f_tmdb and f_tmdb != expected_tmdb_str:
+                    logger.error(
+                        f"[tmdb_check] HARD REJECT '{first.name}' ({first.year}) on '{provider}' — "
+                        f"tmdb_id mismatch: got={f_tmdb} expected={expected_tmdb_str}. "
+                        f"Trying next provider."
+                    )
+                    return None
+                if self._titles_are_compatible(title, first.name or ""):
+                    f_year = first.year or ""
+                    year_ok = True
+                    if year_start is not None and year_end is not None and f_year:
+                        try:
+                            year_ok = year_start <= int(f_year) <= year_end
+                        except (ValueError, TypeError):
+                            year_ok = False
+                    if year_ok:
+                        best = first
+                        logger.info(
+                            f"[search] ACCEPT first result '{first.name}' ({first.year or 'no year'}) — "
+                            f"title match fallback"
+                        )
+                    else:
+                        logger.warning(
+                            f"[search] SKIP first result '{first.name}' ({first.year}) — "
+                            f"year out of range [{year_start}-{year_end}]"
+                        )
+                else:
+                    logger.warning(
+                        f"[title_check] SKIP first result '{first.name}' ({first.year}) — "
+                        f"title too different from '{title}'"
+                    )
 
-            # Don't fallback to random results - skip if no verified match
             if best is None:
                 logger.error(
-                    f"No verified match found for '{verify_title}' "
-                    f"(year_range={year_range}). Skipping download. "
-                    f"First result was: '{results[0].name}' ({results[0].year})"
+                    f"[search] No match for '{expected_title or title}' on '{provider}' "
+                    f"(year_range={year_range}, expected_tmdb={tmdb_id}). "
+                    f"Top result was: '{results[0].name}' ({results[0].year})"
                 )
                 return None
 
-            return {**best.__dict__, "is_movie": best.is_movie}
+            # ── ITA preference ────────────────────────────────────────────
+            # If download_italian_anime_default=true and the best result is not
+            # already an ITA version, look for one among the remaining results.
+            _conf_path = pathlib.Path(__file__).parent.parent.parent.parent / "Conf" / "config.json"
+            try:
+                with open(_conf_path, encoding="utf-8") as _f:
+                    _prefer_ita = json.load(_f).get("ARR", {}).get("download_italian_anime_default", True)
+            except Exception:
+                _prefer_ita = True
+
+            if _prefer_ita and "(ITA)" not in (best.name or "").upper():
+                ita = next(
+                    (r for r in results
+                     if "(ITA)" in (r.name or "").upper()
+                     and self._titles_are_compatible(title, r.name or "")),
+                    None,
+                )
+                if ita:
+                    logger.info(
+                        f"[ita] Preferring ITA version '{ita.name}' "
+                        f"over '{best.name}' (download_italian_anime_default=true)"
+                    )
+                    best = ita
+                else:
+                    logger.info(f"[ita] No ITA version available, keeping '{best.name}'")
+
+            payload = {**best.__dict__, "is_movie": best.is_movie}
+            logger.debug(f"[search] Payload: {json.dumps(payload, default=str, ensure_ascii=False)}")
+            return payload
 
         except Exception as exc:
             logger.error(f"Search failed for '{title}' on {provider}: {exc}")
@@ -466,20 +736,45 @@ class ArrDownloaderService:
 
         return None
 
-    def _resolve_radarr_title(self, movie_id: int) -> Optional[str]:
+    def _resolve_radarr_title(self, movie_id: int, tmdb_id: Optional[int] = None) -> Optional[str]:
         """Try to get the original title from Radarr.
 
-        Falls back to scanning all movies by title if the ID lookup fails."""
+        If the original title is non-ASCII (e.g. Japanese/Korean/Chinese),
+        falls back to the Italian then English title from TMDB so that
+        StreamingCommunity can find it by a localized name.
+        """
+        import re
+        import unicodedata
+
+        original = None
         try:
             movie = self.radarr.get_movie_by_id(movie_id)
             original = movie.get("originalTitle")
             if original:
                 logger.info(f"Using original title from Radarr: '{original}'")
-                return original
         except Exception as exc:
             logger.debug(f"Radarr movie lookup by ID {movie_id} failed: {exc}")
 
-        return None
+        # If original is fully non-ASCII, get a localised title from TMDB
+        if original and tmdb_id:
+            ascii_part = re.sub(r'\s+', '', unicodedata.normalize('NFKD', original)
+                                .encode('ascii', 'ignore').decode('ascii'))
+            if not ascii_part:
+                try:
+                    from VibraVid.utils.tmdb_client import tmdb_client as tmdb
+                    for lang in ["it", "en"]:
+                        details = tmdb._make_request(f"movie/{tmdb_id}", {"language": lang})
+                        loc_title = details.get("title", "")
+                        if loc_title and loc_title != original:
+                            logger.info(
+                                f"Non-ASCII original '{original}' → using {lang.upper()} "
+                                f"TMDB title: '{loc_title}'"
+                            )
+                            return loc_title
+                except Exception as tmdb_exc:
+                    logger.debug(f"TMDB localised title fallback failed: {tmdb_exc}")
+
+        return original
 
     @staticmethod
     def _build_year_range(year) -> Optional[str]:
@@ -551,7 +846,7 @@ class ArrDownloaderService:
                 root = pathlib.PurePosixPath(arr_movie_path).parent
                 
             for part in path_components:
-                root = root / part
+                root = root / part.strip()  # strip trailing spaces from year-less format
             return str(root)
         except Exception as exc:
             logger.debug(f"Could not compute VibraVid movie output path: {exc}")
