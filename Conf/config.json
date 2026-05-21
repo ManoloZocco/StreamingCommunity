@@ -43,7 +43,8 @@
         "merge_audio": true,
         "merge_subtitle": true,
         "force_subtitle": "auto",
-        "extension": "mkv"
+        "extension": "mkv",
+        "engine": "ffmpeg"
     },
     "REQUESTS": {
         "timeout": 20,

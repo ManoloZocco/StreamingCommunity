@@ -9,7 +9,7 @@ from typing import List, Dict, Any
 from rich.console import Console
 
 from VibraVid.utils import config_manager
-from VibraVid.setup import binary_paths, get_ffmpeg_path
+from VibraVid.setup import binary_paths, get_ffmpeg_path, get_mkvmerge_path
 from VibraVid.core.ui.tracker import context_tracker
 from VibraVid.core.utils.language import resolve_iso639_2
 
@@ -25,6 +25,7 @@ USE_GPU = config_manager.config.get_bool("PROCESS", "use_gpu")
 FORCE_SUBTITLE = config_manager.config.get("PROCESS", "force_subtitle")
 SUBTITLE_DISPOSITION_LANGUAGE = config_manager.config.get("PROCESS", "subtitle_disposition_language")
 _GPU_TYPE_CACHE = None
+MUX_ENGINE = config_manager.config.get("PROCESS", "engine", default="ffmpeg").lower()
 
 
 def _get_param_video() -> list:
@@ -259,6 +260,40 @@ def _build_global_metadata_flags() -> list:
     return flags
 
 
+def _mkvmerge_lang_flag(track: Dict[str, Any], default: str = "und") -> str:
+    raw = track.get("language") or track.get("name") or track.get("lang") or default
+    return resolve_iso639_2(str(raw))
+
+
+def _mkvmerge_track_name(track: Dict[str, Any]) -> str:
+    return track.get("name") or track.get("language") or track.get("lang") or ""
+
+
+def _strip_drm_boxes(src_path: str) -> str:
+    base, ext = os.path.splitext(src_path)
+    out_path = f"{base}_nodrm{ext}"
+
+    if os.path.exists(out_path):
+        logger.info(f"[strip_drm_boxes] cached strip already exists: {os.path.basename(out_path)}")
+        return out_path
+
+    cmd = [get_ffmpeg_path(), "-i", src_path, "-c", "copy", "-map", "0", out_path, "-y"]
+    logger.info(f"[strip_drm_boxes] stripping DRM boxes: {' '.join(cmd)}")
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0 or not os.path.exists(out_path) or os.path.getsize(out_path) == 0:
+            logger.warning(f"[strip_drm_boxes] ffmpeg strip failed (rc={result.returncode}), falling back to original. stderr: {result.stderr[-400:]}")
+            return src_path
+    except Exception as exc:
+        logger.warning(f"[strip_drm_boxes] exception during strip, falling back: {exc}")
+        return src_path
+
+    logger.info(f"[strip_drm_boxes] strip OK: {os.path.basename(out_path)}")
+    return out_path
+
+
+
 def join_video(video_path: str, out_path: str):
     """
     Mux video file using FFmpeg.
@@ -270,6 +305,11 @@ def join_video(video_path: str, out_path: str):
     Returns:
         tuple: (out_path, result_json)
     """
+    if MUX_ENGINE == "mkvmerge":
+        base, _ = os.path.splitext(out_path)
+        out_path = base + ".mkv"
+        return _join_video_mkvmerge(video_path, out_path)
+
     out_path = _apply_compatible_extension(video_path, out_path)
     ffmpeg_cmd = [get_ffmpeg_path()]
 
@@ -277,7 +317,7 @@ def join_video(video_path: str, out_path: str):
         gpu_type_hwaccel = detect_gpu_device_type()
         console.print(f'\n[yellow]FFMPEG [cyan]Detected GPU for video join: [red]{gpu_type_hwaccel}')
         ffmpeg_cmd.extend(['-hwaccel', gpu_type_hwaccel])
-
+    
     # Detect timestamp issues and add regeneration flag
     has_ts_issues = detect_ts_timestamp_issues(video_path)
     if has_ts_issues:
@@ -297,6 +337,30 @@ def join_video(video_path: str, out_path: str):
     result_json = capture_ffmpeg_real_time(ffmpeg_cmd, '[yellow]FFMPEG [cyan]Join video', total_duration)
     if context_tracker.should_print:
         print()
+
+    return out_path, result_json
+
+def _join_video_mkvmerge(video_path: str, out_path: str):
+    video_path = _strip_drm_boxes(video_path)
+
+    title = (context_tracker.title or "").strip()
+    cmd = [
+        get_mkvmerge_path(),
+        "--output", out_path,
+    ]
+    if title:
+        cmd += ["--title", title]
+
+    cmd += [
+        "--no-audio",
+        "--no-subtitles",
+        "--no-attachments",
+        video_path,
+    ]
+
+    logger.info(f"Running Join Video (mkvmerge) command: {' '.join(cmd)}")
+    total_duration = get_video_duration(video_path)
+    result_json = capture_ffmpeg_real_time(cmd, '[yellow]MKVMERGE [cyan]Join video', total_duration)
 
     return out_path, result_json
 
@@ -333,6 +397,7 @@ def join_audios(video_path: str, audio_tracks: List[Dict[str, str]], out_path: s
             else:
                 console.print(f'[red]Failed to convert audio TS {audio_path} to M4A')
 
+    # Validation audio track
     valid_audio_tracks = []
     for audio_track in audio_tracks:
         audio_path = audio_track.get('path')
@@ -349,22 +414,27 @@ def join_audios(video_path: str, audio_tracks: List[Dict[str, str]], out_path: s
         logger.warning("join_audios: no valid audio tracks remaining after duration check.")
         return join_video(video_path, out_path), False, None
 
+    # Check duration differences and log info/warnings
     for audio_track in audio_tracks:
         audio_path = audio_track.get('path')
         audio_lang = audio_track.get('name', 'unknown')
         _, diff, video_duration, audio_duration = check_duration_v_a(video_path, audio_path)
         diff_str = (f"+{(video_duration - audio_duration):.2f}s" if (video_duration - audio_duration) >= 0 else f"{(video_duration - audio_duration):.2f}s")
         console.print(f'[yellow]    - [cyan]Audio lang [red]{audio_lang}, [cyan]Video: [red]{video_duration:.2f}s, [cyan]Diff: [red]{diff_str}')
-
+        
         if diff > limit_duration_diff:
             console.print(f'[yellow]    WARN [cyan]Audio lang: [red]{audio_lang!r} [cyan]has a duration difference of [red]{diff:.2f}s [cyan]which exceeds the limit of [red]{limit_duration_diff}s.')
             use_shortest = True
+
+    if MUX_ENGINE == "mkvmerge":
+        result = _join_audios_mkvmerge(video_path, audio_tracks, out_path)
+        return result[0], use_shortest, result[1]
 
     ffmpeg_cmd = [get_ffmpeg_path()]
 
     if USE_GPU:
         ffmpeg_cmd.extend(['-hwaccel', detect_gpu_device_type()])
-
+    
     if video_path.lower().endswith('.ts'):
         ffmpeg_cmd.extend(['-f', 'mpegts'])
     ffmpeg_cmd.extend(['-i', video_path])
@@ -395,7 +465,7 @@ def join_audios(video_path: str, audio_tracks: List[Dict[str, str]], out_path: s
 
     if use_shortest:
         ffmpeg_cmd.extend(['-shortest', '-strict', 'experimental'])
-
+    
     ffmpeg_cmd.extend(_build_global_metadata_flags())
     ffmpeg_cmd.extend([out_path, '-y'])
 
@@ -405,15 +475,39 @@ def join_audios(video_path: str, audio_tracks: List[Dict[str, str]], out_path: s
     if context_tracker.should_print:
         print()
 
-    # Clean up temp audio files
-    for temp_path in temp_audio_paths:
-        if os.path.exists(temp_path):
-            try:
-                os.remove(temp_path)
-            except Exception:
-                pass
-
     return out_path, use_shortest, result_json
+
+def _join_audios_mkvmerge(video_path: str, audio_tracks: List[Dict[str, str]], out_path: str):
+    base, _ = os.path.splitext(out_path)
+    out_path = base + ".mkv"
+    video_path = _strip_drm_boxes(video_path)
+
+    title = (context_tracker.title or "").strip()
+    cmd = [get_mkvmerge_path(), "--output", out_path]
+
+    if title:
+        cmd += ["--title", title]
+
+    cmd += ["--no-audio", "--no-subtitles", video_path]
+
+    for i, audio_track in enumerate(audio_tracks):
+        lang_code  = _mkvmerge_lang_flag(audio_track)
+        track_name = _mkvmerge_track_name(audio_track)
+        clean_audio_path = _strip_drm_boxes(audio_track["path"])
+
+        cmd += ["--language", f"0:{lang_code}"]
+        if track_name:
+            cmd += ["--track-name", f"0:{track_name}"]
+
+        cmd += ["--default-track", f"0:{'yes' if i == 0 else 'no'}"]
+        cmd += ["--audio-tracks", "0", "--no-video", "--no-subtitles", clean_audio_path]
+
+    logger.info(f"Running Join Audio (mkvmerge) command: {' '.join(cmd)}")
+    total_duration = get_video_duration(video_path)
+    result_json = capture_ffmpeg_real_time(cmd, '[yellow]MKVMERGE [cyan]Join audio', total_duration)
+
+    return out_path, result_json
+
 
 def join_subtitles(video_path: str, subtitles_list: List[Dict[str, str]], out_path: str):
     """
@@ -432,8 +526,8 @@ def join_subtitles(video_path: str, subtitles_list: List[Dict[str, str]], out_pa
     if subtitle_order:
         subtitles_list = _sort_tracks_by_order(subtitles_list, subtitle_order, ["language", "lang", "name"])
         logger.info(f"Applying configured subtitle order: {subtitle_order}")
- 
-    # ── De-duplicate by resolved path (guards against any upstream double-add) ─
+
+    # De-duplicate by resolved path (guards against any upstream double-add)
     seen_paths: set = set()
     deduped: List[Dict[str, str]] = []
     for sub in subtitles_list:
@@ -444,12 +538,11 @@ def join_subtitles(video_path: str, subtitles_list: List[Dict[str, str]], out_pa
         seen_paths.add(canonical)
         deduped.append(sub)
     subtitles_list = deduped
- 
-    # ── Pre-process: wvtt-mp4 → vtt extraction + normal conversion ───────────
+
+    # Pre-process: wvtt-mp4 → vtt extraction + normal conversion 
     processed: List[Dict[str, str]] = []
     for subtitle in subtitles_list:
         original_path = subtitle["path"]
- 
         if subtitle.get("is_wvtt_mp4"):
 
             # Extract plain VTT from the fMP4 container (defined in helper/sub.py)
@@ -464,7 +557,7 @@ def join_subtitles(video_path: str, subtitles_list: List[Dict[str, str]], out_pa
             else:
                 logger.error(f"join_subtitles: wvtt extraction failed for {os.path.basename(original_path)}, skipping")
             continue
- 
+
         # Normal subtitle: fix extension / convert format
         corrected_path = convert_subtitle(original_path, FORCE_SUBTITLE)
         if not corrected_path:
@@ -472,32 +565,33 @@ def join_subtitles(video_path: str, subtitles_list: List[Dict[str, str]], out_pa
         sub = dict(subtitle)
         sub["path"] = corrected_path
         processed.append(sub)
- 
+
     if not processed:
         logger.warning("join_subtitles: no valid subtitle tracks to mux after pre-processing")
         return join_video(video_path, out_path)
- 
+
     subtitles_list = processed
- 
-    # ── Build FFmpeg command ──────────────────────────────────────────────────
+
+    if MUX_ENGINE == "mkvmerge":
+        return _join_subtitles_mkvmerge(video_path, subtitles_list, out_path)
+
     ffmpeg_cmd = [get_ffmpeg_path()]
     output_ext = os.path.splitext(out_path)[1].lower()
- 
     if output_ext == ".mp4":
         subtitle_codec = "mov_text"
     elif output_ext == ".mkv":
         subtitle_codec = "srt"
     else:
         subtitle_codec = "copy"
- 
+
     ffmpeg_cmd += ["-i", video_path]
     for subtitle in subtitles_list:
         ffmpeg_cmd += ["-i", subtitle["path"]]
- 
+
     ffmpeg_cmd += ["-map", "0:v"]
     if has_audio(video_path):
         ffmpeg_cmd += ["-map", "0:a"]
- 
+
     for idx, subtitle in enumerate(subtitles_list):
         sub_path     = subtitle["path"]
         sub_ext      = os.path.splitext(sub_path)[1].lower().lstrip(".")
@@ -527,9 +621,10 @@ def join_subtitles(video_path: str, subtitles_list: List[Dict[str, str]], out_pa
         ffmpeg_cmd += [f"-metadata:s:s:{idx}", f"handler_name={lang_display}"]
 
     ffmpeg_cmd.extend(["-c:v", "copy", "-c:a", "copy", "-c:s", subtitle_codec])
- 
-    # ── Disposizioni subtitle ─────────────────────────────────────────────────
+
+    # Disposizioni subtitle 
     # Passo 1: reset everything to 0
+
     for idx in range(len(subtitles_list)):
         ffmpeg_cmd.extend([f"-disposition:s:{idx}", "0"])
 
@@ -539,7 +634,6 @@ def join_subtitles(video_path: str, subtitles_list: List[Dict[str, str]], out_pa
         lang_lower = subtitle.get("language", "").lower()
         is_forced = "_forced" in lang_lower or bool(subtitle.get("forced"))
         is_hi = "_sdh" in lang_lower or "_cc" in lang_lower or bool(subtitle.get("sdh")) or bool(subtitle.get("cc"))
-
         if is_forced or is_hi:
             disp_parts = []
             if is_forced:
@@ -566,11 +660,60 @@ def join_subtitles(video_path: str, subtitles_list: List[Dict[str, str]], out_pa
 
     ffmpeg_cmd.extend(_build_global_metadata_flags())
     ffmpeg_cmd += [out_path, "-y"]
- 
+
     total_duration = get_video_duration(video_path)
     logger.info(f"Running Join Subtitle command: {' '.join(ffmpeg_cmd)}")
     result_json = capture_ffmpeg_real_time(ffmpeg_cmd, "[yellow]FFMPEG [cyan]Join subtitle", total_duration)
     if context_tracker.should_print:
         print()
- 
+
+    return out_path, result_json
+
+def _join_subtitles_mkvmerge(video_path: str, subtitles_list: List[Dict[str, str]], out_path: str):
+    base, _ = os.path.splitext(out_path)
+    out_path = base + ".mkv"
+    video_path = _strip_drm_boxes(video_path)
+
+    title = (context_tracker.title or "").strip()
+    cmd = [get_mkvmerge_path(), "--output", out_path]
+    if title:
+        cmd += ["--title", title]
+
+    cmd += ["--no-subtitles", video_path]
+    config_lang = (SUBTITLE_DISPOSITION_LANGUAGE or "").lower().strip()
+    default_assigned = False
+
+    for idx, subtitle in enumerate(subtitles_list):
+        sub_path     = subtitle["path"]
+        sub_ext      = os.path.splitext(sub_path)[1].lower().lstrip(".")
+        lang_display = subtitle.get("lang", subtitle.get("language", "unknown"))
+        lang_iso     = resolve_iso639_2(lang_display)
+        lang_lower   = subtitle.get("language", "").lower()
+
+        is_forced = "_forced" in lang_lower or bool(subtitle.get("forced"))
+        is_hi     = "_sdh" in lang_lower or "_cc" in lang_lower or bool(subtitle.get("sdh")) or bool(subtitle.get("cc"))
+        console.print(f"[yellow]    - [cyan]Subtitle lang [red]{lang_display}.{sub_ext}")
+
+        cmd += ["--language",    f"0:{lang_iso}"]
+        cmd += ["--track-name",  f"0:{lang_display}"]
+
+        # forced flag
+        cmd += ["--forced-track", f"0:{'yes' if is_forced else 'no'}"]
+
+        # hearing-impaired flag
+        cmd += ["--hearing-impaired-flag", f"0:{'yes' if is_hi else 'no'}"]
+
+        # default track: segui SUBTITLE_DISPOSITION_LANGUAGE, altrimenti mai default
+        if config_lang and not default_assigned and lang_lower == config_lang:
+            cmd += ["--default-track", "0:yes"]
+            console.print(f"[yellow]    Setting disposition: [red]{lang_display}")
+            default_assigned = True
+        else:
+            cmd += ["--default-track", "0:no"]
+
+        cmd += ["--subtitle-tracks", "0", "--no-video", "--no-audio", sub_path]
+
+    logger.info(f"Running Join Subtitle (mkvmerge) command: {' '.join(cmd)}")
+    total_duration = get_video_duration(video_path)
+    result_json = capture_ffmpeg_real_time(cmd, "[yellow]MKVMERGE [cyan]Join subtitle", total_duration)
     return out_path, result_json

@@ -248,7 +248,8 @@ S%(season:02d)/     →  season folder   S01/
     "select_video": "1920",
     "select_audio": "ita|Ita",
     "select_subtitle": "ita|eng|Ita|Eng",
-    "cleanup_tmp_folder": true
+    "cleanup_tmp_folder": true,
+    "engine": "ffmpeg"
   }
 }
 ```
@@ -263,6 +264,7 @@ S%(season:02d)/     →  season folder   S01/
 | `thread_count` | `12` | Number of concurrent segment requests for a single stream |
 | `concurrent_download` | `true` | Download video, audio, and subtitles simultaneously |
 | `cleanup_tmp_folder` | `true` | Remove temporary files after download |
+| `engine` | `"ffmpeg"` | Muxing engine used to combine video, audio and subtitle tracks. `ffmpeg`, `mkvmerge` requires a **full installation** |
 
 #### Stream Selection Filters
 
