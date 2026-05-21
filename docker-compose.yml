@@ -46,10 +46,17 @@ services:
       PYTHONUNBUFFERED: "1"
       PYTHONPATH: "/app:${PYTHONPATH}"
 
-      # Host Configuration — override via .env or environment variables
-      ALLOWED_HOSTS: "${ALLOWED_HOSTS:-localhost,127.0.0.1}"
-      CSRF_TRUSTED_ORIGINS: "${CSRF_TRUSTED_ORIGINS:-http://localhost:8000,http://127.0.0.1:8000}"
+      # User / group ID for file ownership on host-mounted volumes.
+      # Set these to match the uid/gid that owns your NAS share so that
+      # downloaded files are writable by your normal user. Run `id <user>`
+      # on the NAS host to find the correct values.
+      # PUID: "1000"
+      # PGID: "1000"
 
+      # Host Configuration
+      ALLOWED_HOSTS: "localhost,127.0.0.1"
+      CSRF_TRUSTED_ORIGINS: "http://localhost:8000,http://127.0.0.1:8000"
+      
       # Uncomment for private network deployment (behind reverse proxy)
       # USE_X_FORWARDED_HOST: "true"
       # SECURE_PROXY_SSL_HEADER_ENABLED: "true"
