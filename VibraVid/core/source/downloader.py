@@ -10,7 +10,7 @@ import threading
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlsplit, urlunsplit
 
 from VibraVid.utils import config_manager
 from VibraVid.utils.http_client import create_client, get_proxy_url
@@ -43,10 +43,11 @@ CONCURRENT_DL = config_manager.config.get_bool("DOWNLOAD", "concurrent_download"
 THREAD_COUNT = config_manager.config.get_int("DOWNLOAD",  "thread_count")
 RETRY_COUNT = config_manager.config.get_int("REQUESTS",  "max_retry")
 REQUEST_TIMEOUT = config_manager.config.get_int("REQUESTS",  "timeout")
+MAX_TOKEN_REFRESH_ROUNDS = config_manager.config.get_int("DOWNLOAD", "max_token_refresh_rounds")
 
 
 class MediaDownloader(LiveDownloadMixin, BaseMediaDownloader):
-    def __init__(self, url: str, output_dir: str, filename: str, headers: Optional[Dict] = None, key: Optional[Any] = None, cookies: Optional[Dict] = None, download_id: Optional[str] = None, site_name: Optional[str] = None, max_segments: Optional[int] = None, max_time: Optional[float] = None, manifest_content: Optional[str] = None, manifest_protocol: Optional[str] = None) -> None:
+    def __init__(self, url: str, output_dir: str, filename: str, headers: Optional[Dict] = None, key: Optional[Any] = None, cookies: Optional[Dict] = None, download_id: Optional[str] = None, site_name: Optional[str] = None, max_segments: Optional[int] = None, max_time: Optional[float] = None, manifest_content: Optional[str] = None, manifest_protocol: Optional[str] = None, manifest_refresh_fn=None) -> None:
         super().__init__(
             url=url,
             output_dir=output_dir,
@@ -58,6 +59,7 @@ class MediaDownloader(LiveDownloadMixin, BaseMediaDownloader):
             site_name=site_name,
             manifest_content=manifest_content,
             manifest_protocol=manifest_protocol,
+            manifest_refresh_fn=manifest_refresh_fn,
         )
         self.max_segments = max_segments
         self.max_time = max_time
@@ -365,7 +367,25 @@ class MediaDownloader(LiveDownloadMixin, BaseMediaDownloader):
             logger.info(f"Limiting HLS download to {len(dl_segs)} segments (max_segments={self.max_segments})")
 
         dl_segs = self._apply_max_time(dl_segs)
-        self._download_stream_generic(dl_segs, stream, "hls", "ts", bar_manager, live_decryption=live_decryption)
+
+        def _refresh_hls_seg_urls(failed_numbers: List[int]) -> Dict[int, str]:
+            logger.info(f"HLS token refresh: {len(failed_numbers)} failed segment(s), attempting manifest refresh to get new token")
+            if not self.manifest_refresh_fn:
+                return {}
+            
+            fresh_master = self.manifest_refresh_fn()
+            if not fresh_master:
+                logger.error("HLS token refresh: manifest_refresh_fn returned no URL")
+                return {}
+            
+            fresh_query = urlsplit(fresh_master).query
+            failed_set = set(failed_numbers)
+            return {
+                s["number"]: urlunsplit(urlsplit(s["url"])._replace(query=fresh_query))
+                for s in dl_segs if s["number"] in failed_set
+            }
+
+        self._download_stream_generic(dl_segs, stream, "hls", "ts", bar_manager, live_decryption=live_decryption, seg_url_refresh_fn=_refresh_hls_seg_urls)
 
     def _download_dash_stream(self, stream, bar_manager: DownloadBarManager, live_decryption: bool = False) -> None:
         if not stream.segments:
@@ -420,7 +440,25 @@ class MediaDownloader(LiveDownloadMixin, BaseMediaDownloader):
             logger.info(f"Limiting DASH download to {len(dl_segs)} segments (max_segments={self.max_segments})")
 
         dl_segs = self._apply_max_time(dl_segs)
-        self._download_stream_generic(dl_segs, stream, "dash", "mp4", bar_manager, live_decryption=live_decryption)
+
+        def _refresh_dash_seg_urls(failed_numbers: List[int]) -> Dict[int, str]:
+            logger.info(f"DASH token refresh: {len(failed_numbers)} failed segment(s), attempting manifest refresh to get new token")
+            if not self.manifest_refresh_fn:
+                return {}
+            
+            fresh_master = self.manifest_refresh_fn()
+            if not fresh_master:
+                logger.error("DASH token refresh: manifest_refresh_fn returned no URL")
+                return {}
+            
+            fresh_query = urlsplit(fresh_master).query
+            failed_set = set(failed_numbers)
+            return {
+                s["number"]: urlunsplit(urlsplit(s["url"])._replace(query=fresh_query))
+                for s in dl_segs if s["number"] in failed_set
+            }
+
+        self._download_stream_generic(dl_segs, stream, "dash", "mp4", bar_manager, live_decryption=live_decryption, seg_url_refresh_fn=_refresh_dash_seg_urls)
 
     def _download_ism_stream(self, stream, bar_manager: DownloadBarManager) -> None:
         if not stream.segments:
@@ -483,8 +521,25 @@ class MediaDownloader(LiveDownloadMixin, BaseMediaDownloader):
 
         dl_segs = self._apply_max_time(dl_segs)
 
+        def _refresh_ism_seg_urls(failed_numbers: List[int]) -> Dict[int, str]:
+            logger.info(f"ISM token refresh: {len(failed_numbers)} failed segment(s), attempting manifest refresh to get new token")
+            if not self.manifest_refresh_fn:
+                return {}
+            
+            fresh_master = self.manifest_refresh_fn()
+            if not fresh_master:
+                logger.error("ISM token refresh: manifest_refresh_fn returned no URL")
+                return {}
+            
+            fresh_query = urlsplit(fresh_master).query
+            failed_set = set(failed_numbers)
+            return {
+                s["number"]: urlunsplit(urlsplit(s["url"])._replace(query=fresh_query))
+                for s in dl_segs if s["number"] in failed_set
+            }
+
         # Force live_decryption=False → no per-segment decrypt worker
-        self._download_stream_generic(dl_segs, stream, "ism", "mp4", bar_manager, live_decryption=False)
+        self._download_stream_generic(dl_segs, stream, "ism", "mp4", bar_manager, live_decryption=False, seg_url_refresh_fn=_refresh_ism_seg_urls)
 
     @staticmethod
     def _get_mp4fragment_path() -> Optional[str]:
@@ -630,7 +685,7 @@ class MediaDownloader(LiveDownloadMixin, BaseMediaDownloader):
         })
         return True
 
-    def _download_stream_generic(self, dl_segs: List[Dict], stream, protocol: str, default_ext: str, bar_manager: DownloadBarManager, live_decryption: bool = False) -> None:
+    def _download_stream_generic(self, dl_segs: List[Dict], stream, protocol: str, default_ext: str, bar_manager: DownloadBarManager, live_decryption: bool = False, seg_url_refresh_fn=None) -> None:
         task_key = self._stream_task_key(stream)
         total = len(dl_segs)
         stream_dir = self._make_stream_dir(stream, protocol)
@@ -857,6 +912,31 @@ class MediaDownloader(LiveDownloadMixin, BaseMediaDownloader):
                 decrypt_queue.put(dict(event))
 
         paths = self._run_dl(dl_segs, stream_dir, all_headers, _progress, stream=stream, event_cb=_handle_download_event, default_ext=default_ext)
+
+        # Token-refresh retry: when segments fail (e.g. the CDN manifest token expired mid-download → HTTP 403)
+        if seg_url_refresh_fn and not self._stop_check():
+            logger.info(f"{protocol.upper()} checking for failed segments to retry with fresh tokens")
+            seg_by_number = {s["number"]: s for s in dl_segs}
+            failed = collect_failed_segments(dl_segs, paths, stream_dir, default_ext)
+            rounds = 0
+
+            while failed and rounds < MAX_TOKEN_REFRESH_ROUNDS and not self._stop_check():
+                rounds += 1
+                failed_numbers = [n for n, _ in failed]
+                fresh_map = seg_url_refresh_fn(failed_numbers)
+                retry_segs = [{**seg_by_number[n], "url": fresh_map[n]} for n in failed_numbers if n in fresh_map and n in seg_by_number]
+                if not retry_segs:
+                    break
+
+                logger.warning(f"Token refresh round {rounds}: retrying {len(retry_segs)} segment(s) with a fresh token")
+                retry_paths = self._run_dl(retry_segs, stream_dir, all_headers, _progress, stream=stream, event_cb=_handle_download_event, default_ext=default_ext)
+                paths.extend(retry_paths)
+                new_failed = collect_failed_segments(dl_segs, paths, stream_dir, default_ext)
+                
+                if len(new_failed) >= len(failed):  # no progress → token still dead / host moved
+                    failed = new_failed
+                    break
+                failed = new_failed
 
         if decrypt_thread:
             decrypt_queue.put(None)

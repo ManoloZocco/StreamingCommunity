@@ -226,9 +226,41 @@ jobs:
                   python -m pip install -r requirements.txt
                   python -m pip install pyinstaller
 
+            - name: Convert icon (Windows)
+              if: runner.os == 'Windows'
+              shell: bash
+              run: |
+                  pip install Pillow
+                  python -c "
+from PIL import Image
+img = Image.open('.github/logo/logo.png').convert('RGBA')
+img.save('icon.ico', format='ICO', sizes=[(16,16),(32,32),(48,48),(64,64),(128,128),(256,256)])
+"
+
+            - name: Convert icon (macOS)
+              if: runner.os == 'macOS'
+              shell: bash
+              run: |
+                  mkdir -p icon.iconset
+                  sips -z 16   16   .github/logo/logo.png --out icon.iconset/icon_16x16.png
+                  sips -z 32   32   .github/logo/logo.png --out icon.iconset/icon_16x16@2x.png
+                  sips -z 32   32   .github/logo/logo.png --out icon.iconset/icon_32x32.png
+                  sips -z 64   64   .github/logo/logo.png --out icon.iconset/icon_32x32@2x.png
+                  sips -z 128  128  .github/logo/logo.png --out icon.iconset/icon_128x128.png
+                  sips -z 256  256  .github/logo/logo.png --out icon.iconset/icon_128x128@2x.png
+                  sips -z 256  256  .github/logo/logo.png --out icon.iconset/icon_256x256.png
+                  sips -z 512  512  .github/logo/logo.png --out icon.iconset/icon_256x256@2x.png
+                  iconutil -c icns icon.iconset -o icon.icns
+
             - name: Build executable with PyInstaller
               shell: bash
               run: |
+                  ICON_ARGS=()
+                  if [ "${{ runner.os }}" = "Windows" ]; then
+                    ICON_ARGS=(--icon icon.ico)
+                  elif [ "${{ runner.os }}" = "macOS" ]; then
+                    ICON_ARGS=(--icon icon.icns)
+                  fi
                   pyinstaller --onefile \
                   --hidden-import=ua_generator \
                   --hidden-import=bs4 \
@@ -258,6 +290,7 @@ jobs:
                   --exclude-module Cryptodome.SelfTest \
                   --additional-hooks-dir=pyinstaller/hooks \
                   --add-data "VibraVid${{ matrix.separator }}VibraVid" \
+                  "${ICON_ARGS[@]}" \
                   --name=${{ matrix.artifact_name }} manual.py
 
             - name: Upload executable to Artifacts

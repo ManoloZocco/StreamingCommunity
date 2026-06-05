@@ -287,6 +287,7 @@ S%(season:02d)/     →  cartella stagione  S01/
     "select_audio": "ita|Ita",
     "select_subtitle": "ita|eng|Ita|Eng",
     "cleanup_tmp_folder": true,
+    "max_token_refresh_rounds": 10,
     "engine": "ffmpeg"
   }
 }
@@ -302,6 +303,7 @@ S%(season:02d)/     →  cartella stagione  S01/
 | `thread_count` | `12` | Numero di richieste concorrenti per un singolo flusso |
 | `concurrent_download` | `true` | Scarica video, audio e sottotitoli simultaneamente |
 | `cleanup_tmp_folder` | `true` | Rimuove i file temporanei dopo il download |
+| `max_token_refresh_rounds` | `10` | Numero massimo di tentativi di refresh del token quando i segmenti scadono durante il download (HLS/DASH/ISM). Aumentare se gli stream con token a breve scadenza falliscono frequentemente |
 | `engine` | `"ffmpeg"` | Motore di muxing usato per unire video, audio e sottotitoli. `ffmpeg` funziona senza configurazioni aggiuntive; `mkvmerge` richiede l'installazione completa |
 
 #### Filtri di selezione flusso

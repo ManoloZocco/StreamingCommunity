@@ -53,6 +53,7 @@ def download_film(select_title: Entries) -> str:
     return HLS_Downloader(
         m3u8_url=master_playlist,
         headers=video_source.get_playback_headers(),
+        manifest_refresh_fn=video_source.get_playlist,
         output_path=os.path.join(movie_path, movie_name)
     ).start()
 
@@ -72,6 +73,7 @@ def download_episode(obj_episode, index_season_selected, index_episode_selected,
     return HLS_Downloader(
         m3u8_url=master_playlist,
         headers=video_source.get_playback_headers(),
+        manifest_refresh_fn=video_source.get_playlist,
         output_path=os.path.join(episode_path, episode_name)
     ).start()
 

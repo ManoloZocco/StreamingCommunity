@@ -31,6 +31,7 @@
         "select_audio": "ita|it",
         "select_subtitle": "ita|eng|it|en",
         "live_max_empty_polls": 8,
+        "max_token_refresh_rounds": 10,
         "cleanup_tmp_folder": true
     },
     "PROCESS": {

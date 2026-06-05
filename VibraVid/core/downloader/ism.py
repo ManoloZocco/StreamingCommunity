@@ -3,7 +3,7 @@
 import os
 import time
 import logging
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 
 from rich.console import Console
 
@@ -32,17 +32,19 @@ DELAY_SS = config_manager.config.get_int("DOWNLOAD", "delay_after_download")
 
 
 class ISM_Downloader(BaseDownloader):
-    def __init__(self, ism_url: str,
-        headers: Optional[Dict[str, str]] = None, license_url: Optional[str] = None, license_headers: Optional[Dict[str, str]] = None, license_certificate: Optional[str] = None,
+    def __init__(self, ism_url: str, ism_content: Optional[str] = None, headers: Optional[Dict[str, str]] = None, 
+        manifest_refresh_fn: Optional[Callable[[], Optional[str]]] = None,
+        license_url: Optional[str] = None, license_headers: Optional[Dict[str, str]] = None, license_certificate: Optional[str] = None,
         output_path: Optional[str] = None, drm_preference = DRMType.PLAYREADY, key: Optional[str] = None, cookies: Optional[Dict[str, str]] = None,
         max_segments: Optional[int] = None, max_time=None,
-        other_tracks: Optional[list] = None, ism_content: Optional[str] = None,
+        other_tracks: Optional[list] = None
     ):
         """
         Parameters:
             - ism_url: URL to the ISM manifest (ending with .ism or .ism/manifest).
             - ism_content: Content of the ISM manifest already downloaded (string). If provided, skips the HTTP fetch.
             - headers: HTTP headers for fetching the ISM manifest.
+            - manifest_refresh_fn: Optional function to call to refresh the manifest content during download. Should return the new manifest content as a string, or None to keep using the original.
             - license_url: URL of the license server for DRM key acquisition.
             - license_headers: HTTP headers for license requests (defaults to *headers*).
             - license_certificate: Widevine certificate (base64) for license challenge.
@@ -55,6 +57,8 @@ class ISM_Downloader(BaseDownloader):
         self.ism_url = self._resolve_url(str(ism_url).strip())
         self.ism_content = ism_content
         self.headers = headers or get_headers()
+        self.manifest_refresh_fn = manifest_refresh_fn
+        
         self.license_url = str(license_url).strip() if license_url else None
         self.license_headers = license_headers or self.headers
         self.license_certificate = license_certificate
@@ -217,6 +221,7 @@ class ISM_Downloader(BaseDownloader):
             output_dir=self.output_dir,
             filename=self.filename_base,
             headers=self.headers,
+            manifest_refresh_fn=self.manifest_refresh_fn,
             cookies=self.cookies,
             download_id=self.download_id,
             site_name=self.site_name,

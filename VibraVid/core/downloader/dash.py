@@ -160,10 +160,11 @@ def _to_external_subtitle_track(track: Dict) -> Dict:
 
 
 class DASH_Downloader(BaseDownloader):
-    def __init__(self, mpd_url: Optional[str] = None, mpd_headers: Optional[Dict[str, str]] = None,
+    def __init__(self, mpd_url: Optional[str] = None, mpd_content: Optional[str] = None, mpd_headers: Optional[Dict[str, str]] = None,
+        manifest_refresh_fn: Optional[Callable[[], Optional[str]]] = None,
         license_url: Optional[str] = None, license_headers: Optional[Dict[str, str]] = None, license_certificate: Optional[str] = None, license_data: Optional[str] = None,
         output_path: Optional[str] = None, drm_preference = DRMType.WIDEVINE, key: Optional[str] = None, cookies: Optional[Dict[str, str]] = None,
-        max_segments: Optional[int] = None, max_time=None, other_tracks: Optional[list] = None, mpd_content: Optional[str] = None,
+        max_segments: Optional[int] = None, max_time=None, other_tracks: Optional[list] = None,
         license_request_fn: Optional[Callable[[bytes], bytes]] = None,
     ):
         """
@@ -171,6 +172,7 @@ class DASH_Downloader(BaseDownloader):
             - mpd_url: DASH MPD manifest URL.
             - mpd_content: Content of the MPD manifest already downloaded (string). If provided, skips the HTTP fetch.
             - mpd_headers: HTTP headers for MPD requests.
+            - manifest_refresh_fn: Optional function to call to refresh the manifest content during download. Should return the new manifest content as a string, or None to keep using the original.
             - license_url: DRM license server URL for Widevine/PlayReady.
             - license_request_fn: Optional callback (challenge bytes -> license bytes) for services whose license endpoint is a custom signed API call instead of a plain POST.
             - license_headers: HTTP headers for DRM license requests.
@@ -185,6 +187,7 @@ class DASH_Downloader(BaseDownloader):
         self.mpd_url = self._resolve_url(str(mpd_url).strip()) if mpd_url else None
         self.mpd_content = mpd_content
         self.mpd_headers = mpd_headers or get_headers()
+        self.manifest_refresh_fn = manifest_refresh_fn
         self.other_tracks = [dict(track or {}) for track in (other_tracks or [])]
 
         self._subtitle_tracks: List[Dict] = []
@@ -543,6 +546,7 @@ class DASH_Downloader(BaseDownloader):
             output_dir=self.output_dir,
             filename=self.filename_base,
             headers=self.mpd_headers,
+            manifest_refresh_fn=self.manifest_refresh_fn,
             cookies=self.cookies,
             download_id=self.download_id,
             site_name=self.site_name,

@@ -91,11 +91,12 @@ def lang_variants(normalized_lang: str) -> Set[str]:
 
 
 class BaseMediaDownloader:
-    def __init__(self, url: str, output_dir: str, filename: str, headers: Optional[Dict] = None, key: Optional[Any] = None, cookies: Optional[Dict] = None, download_id: Optional[str] = None, site_name: Optional[str] = None, manifest_content: Optional[str] = None, manifest_protocol: Optional[str] = None) -> None:
+    def __init__(self, url: str, output_dir: str, filename: str, headers: Optional[Dict] = None, key: Optional[Any] = None, cookies: Optional[Dict] = None, download_id: Optional[str] = None, site_name: Optional[str] = None, manifest_content: Optional[str] = None, manifest_protocol: Optional[str] = None, manifest_refresh_fn=None) -> None:
         self.url = url
         self.output_dir = Path(output_dir)
         self.filename = filename
         self.headers = headers or {}
+        self.manifest_refresh_fn = manifest_refresh_fn
         self.manifest_content = manifest_content
         self.manifest_protocol = (manifest_protocol or "").lower() or None
         self.key = key
@@ -103,6 +104,7 @@ class BaseMediaDownloader:
         self.download_id = download_id
         self.site_name = site_name
 
+        # Manifest and stream data
         self.streams: List[Stream] = []
         self.manifest_type: str = "Unknown"
         self.raw_m3u8: Optional[Path] = None
@@ -110,10 +112,12 @@ class BaseMediaDownloader:
         self.raw_ism: Optional[Path] = None
         self.status: Optional[dict] = None
 
+        # Custom selection filters (take precedence over config)
         self._sv: str = "best"
         self._sa: str = "best"
         self._ss: str = "all"
 
+        # External tracks imported from manifest or added by user
         self.external_subtitles: list = []
         self.external_audios: list = []
         self.external_other_tracks: list = []
