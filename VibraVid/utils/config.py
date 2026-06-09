@@ -181,8 +181,13 @@ class ConfigManager:
         """Initialize the ConfigManager with caching."""
         self.base_path = None
         
+        # Strategy 0: Environment variable override
+        env_base_path = os.environ.get('VIBRAVID_BASE_PATH')
+        if env_base_path:
+            self.base_path = env_base_path
+            logger.info("Base path set from environment variable VIBRAVID_BASE_PATH: " + self.base_path)
         # Strategy 1: PyInstaller binary
-        if getattr(sys, 'frozen', False):
+        elif getattr(sys, 'frozen', False):
             self.base_path = os.path.dirname(sys.executable)
             logger.info("Running in PyInstaller binary mode, base path set: " + self.base_path)
         else:
@@ -264,6 +269,14 @@ class ConfigManager:
             if env_root:
                 self._config_data.setdefault('OUTPUT', {})['root_path'] = env_root
                 logger.info(f"OUTPUT.root_path overridden via VIBRAVID_OUTPUT_ROOT={env_root}")
+
+            # Check for Termux/Android environment to default root_path to shared storage
+            is_termux = 'TERMUX_VERSION' in os.environ or os.path.exists('/data/data/com.termux/files/usr/bin')
+            if is_termux:
+                root_path = self._config_data.get('OUTPUT', {}).get('root_path', 'Video')
+                if root_path == 'Video' or not root_path.startswith('/'):
+                    self._config_data.setdefault('OUTPUT', {})['root_path'] = '/sdcard/Movies/VibraVid'
+                    logger.info("OUTPUT.root_path defaulted to /sdcard/Movies/VibraVid for Termux compatibility")
 
             # Pre-cache commonly used configuration values
             self._precache_config_values()
