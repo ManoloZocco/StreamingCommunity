@@ -81,6 +81,25 @@ uv sync --upgrade    # sync deps
 You can find the app in the Community Application
 ```
 
+### Option 5 — Android/Termux (automatic)
+
+> [!IMPORTANT]
+> This script requires **Termux**. Do **NOT** install Termux from the Google Play Store, as that version is outdated and abandoned due to Android policy restrictions. Instead, download the latest official version from:
+> - 📥 [F-Droid](https://f-droid.org/packages/com.termux/)
+> - 📥 [GitHub Releases](https://github.com/termux/termux-app/releases)
+
+Once you have installed Termux, open the app, copy the command below, paste it into the terminal, and press **Enter** to run the automatic installation (it will download VibraVid, compile all necessary components including Velora, and configure the storage folder):
+
+```bash
+curl -sL https://raw.githubusercontent.com/ManoloZocco/StreamingCommunity/main/termux_install.sh | bash
+```
+
+Once the installation is complete, you can launch the app at any time by simply typing:
+
+```bash
+vibravid
+```
+
 ### Additional Documentation
 
 - 📝 [Login Guide](.github/doc/login.md) — Authentication for supported services
@@ -287,7 +306,6 @@ S%(season:02d)/     →  season folder   S01/
     "select_audio": "ita|Ita",
     "select_subtitle": "ita|eng|Ita|Eng",
     "cleanup_tmp_folder": true,
-    "max_token_refresh_rounds": 10,
     "engine": "ffmpeg"
   }
 }
@@ -303,7 +321,6 @@ S%(season:02d)/     →  season folder   S01/
 | `thread_count` | `12` | Number of concurrent segment requests for a single stream |
 | `concurrent_download` | `true` | Download video, audio, and subtitles simultaneously |
 | `cleanup_tmp_folder` | `true` | Remove temporary files after download |
-| `max_token_refresh_rounds` | `10` | Maximum number of token refresh attempts when stream segments expire mid-download (HLS/DASH/ISM). Increase if streams with short-lived tokens fail frequently |
 | `engine` | `"ffmpeg"` | Muxing engine used to combine video, audio and subtitle tracks. `ffmpeg`, `mkvmerge` requires a **full installation** |
 
 #### Stream Selection Filters

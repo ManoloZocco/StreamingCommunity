@@ -3,6 +3,7 @@
 import os
 import logging
 import shutil
+import subprocess
 from typing import Optional, Tuple
 
 from rich.console import Console
@@ -12,11 +13,17 @@ from VibraVid.utils import config_manager
 
 console = Console()
 logger = logging.getLogger(__name__)
+
 INSTALLATION_LEVELS = {
     "none": [],
     "essential": ["bento4", "ffmpeg", "velora"],
     "full": ["bento4", "ffmpeg", "velora", "dovi_tool", "mkvtoolnix"],
 }
+
+
+def is_termux() -> bool:
+    """Check if the application is running inside Termux on Android."""
+    return 'TERMUX_VERSION' in os.environ or os.path.exists('/data/data/com.termux/files/usr/bin')
 
 
 def _should_download(tool_group: str) -> bool:
@@ -44,6 +51,12 @@ def check_bento4() -> Optional[str]:
     if binary_local and os.path.isfile(binary_local):
         logger.debug(f"Found {binary_exec} in local binary directory ({binary_local})")
         return binary_local
+
+    # Termux-specific check
+    if is_termux():
+        console.print("[red]Bento4 (mp4decrypt) is required on Termux.[/red]")
+        console.print("[cyan]Please install it using: [yellow]pkg install bento4[/cyan]")
+        return None
 
     # STEP 3: Download (only if installation level includes bento4)
     if not _should_download("bento4"):
@@ -78,6 +91,12 @@ def check_mp4dump() -> Optional[str]:
     if binary_local and os.path.isfile(binary_local):
         logger.debug(f"Found {binary_exec} in local binary directory ({binary_local})")
         return binary_local
+
+    # Termux-specific check
+    if is_termux():
+        console.print("[red]Bento4 (mp4dump) is required on Termux.[/red]")
+        console.print("[cyan]Please install it using: [yellow]pkg install bento4[/cyan]")
+        return None
 
     # STEP 3: Download (only if installation level includes bento4)
     if not _should_download("bento4"):
@@ -117,6 +136,12 @@ def check_ffmpeg() -> Tuple[Optional[str], Optional[str]]:
         logger.debug(f"Found ffmpeg ({ffmpeg_local}) and ffprobe ({ffprobe_local}) in local binary directory")
         return ffmpeg_local, ffprobe_local
 
+    # Termux-specific check
+    if is_termux():
+        console.print("[red]FFmpeg/FFprobe is required on Termux.[/red]")
+        console.print("[cyan]Please install it using: [yellow]pkg install ffmpeg[/cyan]")
+        return None, None
+
     # STEP 3: Download (only if installation level includes ffmpeg)
     if not _should_download("ffmpeg"):
         logger.info("Skipping download of ffmpeg/ffprobe")
@@ -153,6 +178,12 @@ def check_shaka_packager() -> Optional[str]:
         logger.debug(f"Found Shaka Packager in local binary directory ({packager_local})")
         return packager_local
 
+    # Termux-specific check
+    if is_termux():
+        console.print("[red]Shaka Packager is not supported natively on Termux downloaders.[/red]")
+        console.print("[cyan]If required, please compile it and place it in system PATH.[/cyan]")
+        return None
+
     # STEP 3: Download (only if installation level includes shaka_packager)
     if not _should_download("shaka_packager"):
         logger.info(f"Skipping download of {packager_name}")
@@ -187,6 +218,28 @@ def check_dovi_tool() -> Optional[str]:
     if binary_local and os.path.isfile(binary_local):
         logger.debug(f"Found {binary_exec} in local binary directory ({binary_local})")
         return binary_local
+
+    # Termux-specific check
+    if is_termux():
+        console.print("[yellow]dovi_tool not found in Termux environment.[/yellow]")
+        cargo_path = shutil.which("cargo")
+        if cargo_path:
+            console.print("[cyan]Cargo detected. Attempting to build dovi_tool from source...[/cyan]")
+            binary_dir = binary_paths.ensure_binary_directory()
+            try:
+                cmd = ["cargo", "install", "--quiet", "--git", "https://github.com/quietvoid/dovi_tool", "--root", os.path.dirname(binary_dir)]
+                subprocess.run(cmd, check=True)
+                cargo_bin = os.path.join(os.path.dirname(binary_dir), "bin", "dovi_tool")
+                dest_bin = os.path.join(binary_dir, "dovi_tool")
+                if os.path.isfile(cargo_bin):
+                    shutil.move(cargo_bin, dest_bin)
+                    os.chmod(dest_bin, 0o755)
+                    console.print("[green]dovi_tool compiled and installed successfully![/green]")
+                    return dest_bin
+            except Exception as e:
+                console.print(f"[red]Failed to compile dovi_tool from source: {e}[/red]")
+        console.print("[cyan]Please compile manually using: [yellow]cargo install --git https://github.com/quietvoid/dovi_tool[/cyan]")
+        return None
 
     # STEP 3: Download (only if installation level includes dovi_tool)
     if not _should_download("dovi_tool"):
@@ -223,6 +276,12 @@ def check_mkvmerge() -> Optional[str]:
         logger.debug(f"Found {binary_exec} in local binary directory ({binary_local})")
         return binary_local
 
+    # Termux-specific check
+    if is_termux():
+        console.print("[red]MKVToolNix (mkvmerge) is required on Termux.[/red]")
+        console.print("[cyan]Please install it using: [yellow]pkg install mkvtoolnix[/cyan]")
+        return None
+
     # STEP 3: Download (only if installation level includes mkvtoolnix)
     if not _should_download("mkvtoolnix"):
         logger.info(f"Skipping download of {binary_exec}")
@@ -236,6 +295,7 @@ def check_mkvmerge() -> Optional[str]:
     logger.error(f"Failed to download {binary_exec}")
     console.print(f"Failed to download {binary_exec}", style="red")
     return None
+
 
 def check_velora() -> Optional[str]:
     system_platform = binary_paths.system
@@ -252,6 +312,29 @@ def check_velora() -> Optional[str]:
     if binary_local and os.path.isfile(binary_local):
         logger.debug(f"Found {binary_exec} in local binary directory ({binary_local})")
         return binary_local
+
+    # Termux-specific check
+    if is_termux():
+        console.print("[yellow]Velora binary not found in Termux environment.[/yellow]")
+        cargo_path = shutil.which("cargo")
+        if cargo_path:
+            console.print("[cyan]Cargo detected. Attempting to build Velora from source...[/cyan]")
+            binary_dir = binary_paths.ensure_binary_directory()
+            try:
+                cmd = ["cargo", "install", "--quiet", "--git", "https://github.com/AstraeLabs/Velora", "--root", os.path.dirname(binary_dir)]
+                subprocess.run(cmd, check=True)
+                cargo_bin = os.path.join(os.path.dirname(binary_dir), "bin", "Velora")
+                dest_bin = os.path.join(binary_dir, "velora")
+                if os.path.isfile(cargo_bin):
+                    shutil.move(cargo_bin, dest_bin)
+                    os.chmod(dest_bin, 0o755)
+                    console.print("[green]Velora compiled and installed successfully![/green]")
+                    return dest_bin
+            except Exception as e:
+                console.print(f"[red]Failed to compile Velora from source: {e}[/red]")
+        console.print("[red]Please install rust/clang and compile manually:[/red]")
+        console.print("[white]pkg install rust clang -y && cargo install --git https://github.com/AstraeLabs/Velora[/white]")
+        return None
 
     # STEP 3: Download (only if installation level includes velora)
     if not _should_download("velora"):

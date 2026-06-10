@@ -81,6 +81,25 @@ uv sync --upgrade    # aggiorna dipendenze
 Puoi trovare l'applicazione nella Community Application
 ```
 
+### Opzione 5 — Android/Termux (automatica)
+
+> [!IMPORTANT]
+> Questo script richiede **Termux**. **NON** installare Termux dal Google Play Store, poiché quella versione è obsoleta e abbandonata a causa delle restrizioni di sicurezza di Android. Scarica invece l'ultima versione ufficiale da:
+> - 📥 [F-Droid](https://f-droid.org/packages/com.termux/)
+> - 📥 [GitHub Releases](https://github.com/termux/termux-app/releases)
+
+Una volta installato Termux, apri l'applicazione, copia il comando qui sotto, incollalo nel terminale e premi **Invio** per avviare l'installazione automatica (lo script scaricherà VibraVid, compilerà tutti i componenti necessari compreso Velora, e configurerà la cartella dei video):
+
+```bash
+curl -sL https://raw.githubusercontent.com/ManoloZocco/StreamingCommunity/main/termux_install.sh | bash
+```
+
+Una volta completata l'installazione, potrai avviare l'applicazione in qualsiasi momento scrivendo semplicemente nel terminale:
+
+```bash
+vibravid
+```
+
 ### Documentazione aggiuntiva
 
 - 📝 [Guida al login](../../.github/doc/login.md) — Autenticazione per i servizi supportati
@@ -287,7 +306,6 @@ S%(season:02d)/     →  cartella stagione  S01/
     "select_audio": "ita|Ita",
     "select_subtitle": "ita|eng|Ita|Eng",
     "cleanup_tmp_folder": true,
-    "max_token_refresh_rounds": 10,
     "engine": "ffmpeg"
   }
 }
@@ -303,7 +321,6 @@ S%(season:02d)/     →  cartella stagione  S01/
 | `thread_count` | `12` | Numero di richieste concorrenti per un singolo flusso |
 | `concurrent_download` | `true` | Scarica video, audio e sottotitoli simultaneamente |
 | `cleanup_tmp_folder` | `true` | Rimuove i file temporanei dopo il download |
-| `max_token_refresh_rounds` | `10` | Numero massimo di tentativi di refresh del token quando i segmenti scadono durante il download (HLS/DASH/ISM). Aumentare se gli stream con token a breve scadenza falliscono frequentemente |
 | `engine` | `"ffmpeg"` | Motore di muxing usato per unire video, audio e sottotitoli. `ffmpeg` funziona senza configurazioni aggiuntive; `mkvmerge` richiede l'installazione completa |
 
 #### Filtri di selezione flusso

@@ -29,12 +29,11 @@ _MISSING = object()
 
 
 class ConfigAccessor:
-    def __init__(self, config_dict: Dict, cache: Dict, cache_prefix: str, cache_enabled: bool = True, repair_callback=None):
+    def __init__(self, config_dict: Dict, cache: Dict, cache_prefix: str, cache_enabled: bool = True):
         self._config_dict = config_dict
         self._cache = cache
         self._cache_prefix = cache_prefix
         self._cache_enabled = cache_enabled
-        self._repair_callback = repair_callback
 
     def get(self, section: str, key: str, data_type: type = str, default: Any = _MISSING) -> Any:
         """
@@ -64,28 +63,12 @@ class ConfigAccessor:
                 logger.info(f"Section '{section}' not found in {self._cache_prefix} configuration, returning default.")
                 return default
 
-            if self._repair_callback and self._repair_callback():
-                if section in self._config_dict and key in self._config_dict.get(section, {}):
-                    value = self._config_dict[section][key]
-                    converted_value = self._convert_to_data_type(value, data_type)
-                    if self._cache_enabled:
-                        self._cache[cache_key] = converted_value
-                    return converted_value
-
             raise ValueError(f"Section '{section}' not found in {self._cache_prefix} configuration")
 
         if key not in self._config_dict[section]:
             if default is not _MISSING:
                 logger.info(f"Key '{key}' not found in section '{section}' of {self._cache_prefix} configuration, returning default.")
                 return default
-
-            if self._repair_callback and self._repair_callback():
-                if key in self._config_dict.get(section, {}):
-                    value = self._config_dict[section][key]
-                    converted_value = self._convert_to_data_type(value, data_type)
-                    if self._cache_enabled:
-                        self._cache[cache_key] = converted_value
-                    return converted_value
 
             raise ValueError(f"Key '{key}' not found in section '{section}' of {self._cache_prefix} configuration")
         
@@ -198,8 +181,13 @@ class ConfigManager:
         """Initialize the ConfigManager with caching."""
         self.base_path = None
         
+        # Strategy 0: Environment variable override
+        env_base_path = os.environ.get('VIBRAVID_BASE_PATH')
+        if env_base_path:
+            self.base_path = env_base_path
+            logger.info("Base path set from environment variable VIBRAVID_BASE_PATH: " + self.base_path)
         # Strategy 1: PyInstaller binary
-        if getattr(sys, 'frozen', False):
+        elif getattr(sys, 'frozen', False):
             self.base_path = os.path.dirname(sys.executable)
             logger.info("Running in PyInstaller binary mode, base path set: " + self.base_path)
         else:
@@ -246,7 +234,7 @@ class ConfigManager:
         self._cache_enabled = True
         
         # Create accessors
-        self.config = ConfigAccessor(self._config_data, self.cache, "config", self._cache_enabled, repair_callback=self._repair_missing_config_keys)
+        self.config = ConfigAccessor(self._config_data, self.cache, "config", self._cache_enabled)
         self.login = ConfigAccessor(self._login_data, self.cache, "login", self._cache_enabled)
         self.domain = ConfigAccessor(self._domains_data, self.cache, "domain", self._cache_enabled)
         logger.info("Config accessors initialized with caching enabled")
@@ -281,6 +269,14 @@ class ConfigManager:
             if env_root:
                 self._config_data.setdefault('OUTPUT', {})['root_path'] = env_root
                 logger.info(f"OUTPUT.root_path overridden via VIBRAVID_OUTPUT_ROOT={env_root}")
+
+            # Check for Termux/Android environment to default root_path to shared storage
+            is_termux = 'TERMUX_VERSION' in os.environ or os.path.exists('/data/data/com.termux/files/usr/bin')
+            if is_termux:
+                root_path = self._config_data.get('OUTPUT', {}).get('root_path', 'Video')
+                if root_path == 'Video' or not root_path.startswith('/'):
+                    self._config_data.setdefault('OUTPUT', {})['root_path'] = '/sdcard/Movies/VibraVid'
+                    logger.info("OUTPUT.root_path defaulted to /sdcard/Movies/VibraVid for Termux compatibility")
 
             # Pre-cache commonly used configuration values
             self._precache_config_values()
@@ -373,48 +369,6 @@ class ConfigManager:
             console.print("[red]Unable to proceed. The application will terminate.")
             sys.exit(1)
     
-    def _repair_missing_config_keys(self) -> bool:
-        """Download original config.json and merge only missing keys into the current config."""
-        console.print("[yellow]Missing config key detected, downloading reference config to fill gaps...")
-        logger.info("Attempting to repair missing config keys from remote reference")
-        try:
-            response = requests.get(CONFIG_DOWNLOAD_URL, headers={'User-Agent': "Mozilla/5.0"})
-            if response.status_code != 200:
-                console.print(f"[red]Could not download reference config: HTTP {response.status_code}")
-                return False
-
-            remote_config = response.json()
-            changed = False
-
-            for section, section_data in remote_config.items():
-                if section not in self._config_data:
-                    self._config_data[section] = section_data
-                    changed = True
-                    console.print(f"[yellow]Added missing section: {section}")
-                    logger.info(f"Added missing section: {section}")
-                
-                elif isinstance(section_data, dict):
-                    for key, value in section_data.items():
-                        if key not in self._config_data[section]:
-                            self._config_data[section][key] = value
-                            changed = True
-                            console.print(f"[yellow]Added missing key: [{section}] {key} = {value}")
-                            logger.info(f"Added missing key: {section}.{key} = {value}")
-
-            if changed:
-                self.save_config()
-                self.cache.clear()
-                console.print("[green]Missing keys added and config.json saved.")
-            else:
-                console.print("[yellow]No new keys found in reference config.")
-
-            return changed
-
-        except Exception as e:
-            console.print(f"[red]Failed to repair config: {e}")
-            logger.error(f"Config repair failed: {e}")
-            return False
-
     def _update_settings_from_config(self) -> None:
         """Update internal settings from loaded configurations."""
         logger.info("Updating internal settings from configuration")
