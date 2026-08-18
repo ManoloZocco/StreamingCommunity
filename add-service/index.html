@@ -1,0 +1,1027 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="DRM HLS/DASH downloader documentation">
+      
+      
+      
+      
+        <link rel="prev" href="../login/">
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Adding a Service - VibraVid</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#adding-a-new-service" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="VibraVid" class="md-header__button md-logo" aria-label="VibraVid" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            VibraVid
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Adding a Service
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-hidden="true"  type="radio" name="__palette" id="__palette_0">
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/AstraeLabs/VibraVid" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    VibraVid
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="VibraVid" class="md-nav__button md-logo" aria-label="VibraVid" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    VibraVid
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/AstraeLabs/VibraVid" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    VibraVid
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI Usage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../gui/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Web GUI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tui/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    TUI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../telegram/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Telegram Bot
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../arr/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ARR Integration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../hooks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Hooks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docker/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docker
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../nas/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    NAS Deployment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../login/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Login
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adding a Service
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Adding a Service
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#directory-layout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Directory layout
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#registration-auto-discovery" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Registration (auto-discovery)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Registration (auto-discovery)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#loading-services-from-a-remote-repository" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Loading services from a remote repository
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cli-options-url-etc" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CLI options (--url, etc.)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#authentication-clientpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Authentication (client.py)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#metadata-scrapperpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Metadata (scrapper.py)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#building-the-download-downloaderpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Building the download (downloader.py)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#gui-adapter" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GUI adapter
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#directory-layout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Directory layout
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#registration-auto-discovery" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Registration (auto-discovery)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Registration (auto-discovery)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#loading-services-from-a-remote-repository" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Loading services from a remote repository
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cli-options-url-etc" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CLI options (--url, etc.)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#authentication-clientpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Authentication (client.py)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#metadata-scrapperpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Metadata (scrapper.py)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#building-the-download-downloaderpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Building the download (downloader.py)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#gui-adapter" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GUI adapter
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="adding-a-new-service">Adding a New Service</h1>
+<h2 id="directory-layout">Directory layout</h2>
+<div class="highlight"><pre><span></span><code>VibraVid/services/&lt;name&gt;/
+├── __init__.py     # CLI entry point: search(), title_search(), --url resolution
+├── client.py       # auth + low-level HTTP
+├── scrapper.py     # metadata fetching (title/season/episode info)
+└── downloader.py   # builds DASH_Downloader / HLS_Downloader and starts it
+</code></pre></div>
+<p>This split isn't enforced by the loader — only <code>__init__.py</code> with a <code>search()</code> function is
+required</p>
+<h2 id="registration-auto-discovery">Registration (auto-discovery)</h2>
+<p><code>VibraVid/services/_base/site_loader.py</code> scans <code>VibraVid/services/*/​__init__.py</code> at startup.
+Two module-level names are <strong>required</strong>:</p>
+<div class="highlight"><pre><span></span><code><span class="n">indice</span> <span class="o">=</span> <span class="mi">900</span>          <span class="c1"># sort position in the CLI/GUI site list — pick a free number, the</span>
+                       <span class="c1"># loader renumbers everything to consecutive indices on the next run</span>
+<span class="n">_useFor</span> <span class="o">=</span> <span class="s2">"Film_Serie"</span>  <span class="c1"># one of: Anime, Film_Serie, Serie, Song, Tor</span>
+</code></pre></div>
+<p>A module that defines <code>_hide = True</code> is loaded but excluded from CLI/GUI/ARR listings —
+useful while a service is still being built.</p>
+<h3 id="loading-services-from-a-remote-repository">Loading services from a remote repository</h3>
+<p><code>imp_service</code> (in <code>Conf/config.json</code>, <code>DEFAULT.imp_service</code>) doesn't only accept local folder
+paths — an entry can also be an <strong>http(s) URL to a GitHub or Gitea repository</strong> laid out the
+same way as <code>VibraVid/services/</code> (one subfolder per service, each with its own <code>__init__.py</code>
+defining <code>indice</code>/<code>_useFor</code>).</p>
+<div class="highlight"><pre><span></span><code><span class="nt">"imp_service"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"default"</span><span class="p">,</span><span class="w"> </span><span class="s2">"https://git.example.com/me/my-vibravid-sites"</span><span class="p">]</span>
+</code></pre></div>
+<p>For a private repo, put credentials in the URL userinfo —
+<code>https://user:token@host/owner/repo</code> — and pin a branch/tag with a <code>#ref</code> suffix
+(<code>.../owner/repo#dev</code>); otherwise the repo's default branch is used.</p>
+<h2 id="cli-options-url-etc">CLI options (<code>--url</code>, etc.)</h2>
+<p>Expose a <code>register_cli_args(parser) -&gt; list[str]</code> function; the CLI calls it to add
+site-specific flags and stores their values in <code>context_tracker.site_options</code>, keyed by
+argparse <code>dest</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">register_cli_args</span><span class="p">(</span><span class="n">parser</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+    <span class="n">group</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">add_argument_group</span><span class="p">(</span><span class="s2">"MyService options (--site &lt;n&gt;)"</span><span class="p">)</span>
+    <span class="n">group</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">"--url"</span><span class="p">,</span> <span class="n">dest</span><span class="o">=</span><span class="s2">"url"</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">"Direct title URL."</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">[</span><span class="s2">"url"</span><span class="p">]</span>
+</code></pre></div>
+<p>Read it back in <code>search()</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">search</span><span class="p">(</span><span class="n">string_to_search</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">get_onlyDatabase</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">direct_item</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">selections</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">scrape_serie</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">direct_item</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">get_onlyDatabase</span><span class="p">:</span>
+        <span class="n">url</span> <span class="o">=</span> <span class="p">(</span><span class="n">context_tracker</span><span class="o">.</span><span class="n">site_options</span> <span class="ow">or</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"url"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">url</span><span class="p">:</span>
+            <span class="n">direct_item</span> <span class="o">=</span> <span class="n">_resolve_url_to_item</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">base_search</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="n">direct_item</span><span class="o">=</span><span class="n">direct_item</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
+</code></pre></div>
+<p><code>base_search</code>/<code>base_process_search_result</code> (in <code>VibraVid/services/_base/site_search_manager.py</code>)
+handle the rest — season/episode selection, table display, and dispatch to your
+<code>download_film</code>/<code>download_series</code> functions. Reuse them rather than reimplementing the flow.</p>
+<h2 id="authentication-clientpy">Authentication (<code>client.py</code>)</h2>
+<p>There is no fixed auth pattern — services in this codebase use credential logins, static
+tokens, and captured session cookies, sometimes more than one at once for different parts of
+the same site. What generalizes:</p>
+<ul>
+<li><strong>Cache the session on disk</strong> if login has any real cost (rate limits, a multi-step
+  handshake). Use <code>VibraVid.utils.disk_cache</code> (<code>load</code>/<code>save</code>/<code>is_fresh</code>) keyed by service name,
+  with an <code>expiry</code> timestamp — see <code>tubitv/client.py</code> for the reference shape. Skipping this
+  means every CLI invocation re-authenticates, and some backends will start throttling or
+  blocking logins after a handful of runs in quick succession.</li>
+<li><strong>A fresh HTTP client per request drops cookies set by a previous response.</strong> If auth relies
+  on a session cookie, capture it after login (<code>dict(http_client.cookies)</code>) and pass it
+  explicitly (<code>cookies=...</code>) into every subsequent <code>create_client(...)</code> call — don't assume a
+  cookie jar persists across separate <code>create_client</code> context managers.</li>
+<li><strong>A "web session" and an "app/API session" can be two unrelated login systems</strong> even on the
+  same domain. If an endpoint keeps returning empty/short-form data despite a valid-looking
+  session, check whether it actually belongs to a different auth path than the one you're
+  authenticating against — don't assume all endpoints on one domain share one cookie.</li>
+<li>For IP/region detection, reuse <code>VibraVid.utils.http_client.get_my_location()</code> (already
+  cached to <code>.cache/ip.json</code>) instead of adding another geolocation call.</li>
+</ul>
+<h2 id="metadata-scrapperpy">Metadata (<code>scrapper.py</code>)</h2>
+<p>Populate <code>VibraVid.services._base.object.Episode</code>/<code>Season</code> (CLI path) or the GUI's
+<code>Entries</code>/<code>Episode</code>/<code>Season</code> dataclasses (<code>GUI/searchapp/api/base.py</code>) with what the site
+actually gives you — don't leave <code>image</code>/<code>slug</code>/<code>year</code> empty if the raw API response already
+has them:</p>
+<ul>
+<li><strong><code>image</code> on both search results and episodes</strong> — the GUI's series "hero" background and
+  episode thumbnails fall back to whatever <code>Entries.poster</code>/<code>Episode.image</code> are set to; an
+  empty field there is a visible regression, not a cosmetic one.</li>
+<li><strong><code>slug</code> must be a real, human-readable title slug — never an opaque content ID.</strong> Several
+  downstream lookups (TMDB year/poster resolution in particular) use <code>slug</code> as a search key;
+  passing a content ID through as <code>slug</code> makes every such lookup silently miss.</li>
+<li><strong>Prefer the site's own release date/year field over a TMDB guess.</strong> TMDB slug/name lookup
+  is a <em>fallback</em> for when the site doesn't already carry the year — check the raw metadata
+  response for the real field first.</li>
+</ul>
+<h2 id="building-the-download-downloaderpy">Building the download (<code>downloader.py</code>)</h2>
+<ul>
+<li>If a license/session token is obtainable <strong>up front</strong> (before the manifest is even parsed),
+  prefer passing <code>license_url</code> + <code>license_headers</code> to <code>DASH_Downloader</code>/<code>HLS_Downloader</code> over a
+  per-challenge <code>license_request_fn</code> callback. The CDM pipeline
+  (<code>VibraVid/core/drm/widevine.py</code> / <code>playready.py</code>) already does a plain POST with your headers
+  — a callback is only needed when the license request itself requires per-challenge
+  server-side computation that can't be front-loaded.</li>
+<li><strong>Always pass a real, non-empty <code>license_url</code>, even when a callback does the actual license
+  HTTP request itself.</strong> The vault key-storage step keys stored keys by <code>license_url</code> — leaving
+  it <code>None</code>/unset (which becomes an empty string downstream) makes that save call fail with an
+  HTTP 400, silently losing the key for future reuse even though the download itself succeeds.</li>
+<li>If the service exposes a quality ceiling gated by DRM scheme (e.g. one scheme tops out well
+  below the other), pick <code>drm_preference</code> from the user's configured target quality rather than
+  hardcoding one scheme — see <code>appletv/downloader.py</code>'s <code>resolve_drm_type</code>/<code>_config_wants_uhd</code>
+  for the reference pattern (checks <code>DOWNLOAD.select_video</code> in <code>Conf/config.json</code>).</li>
+</ul>
+<h2 id="gui-adapter">GUI adapter</h2>
+<p>Add <code>GUI/searchapp/api/&lt;name&gt;.py</code> subclassing <code>GenericStreamingAPI</code> (<code>GUI/searchapp/api/generic.py</code>):</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">VibraVid.services.</span><span class="o">&lt;</span><span class="n">name</span><span class="o">&gt;.</span><span class="n">scrapper</span> <span class="kn">import</span><span class="w"> </span><span class="nn">GetSerieInfo</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">Entries</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.generic</span><span class="w"> </span><span class="kn">import</span> <span class="n">GenericStreamingAPI</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">MyService</span><span class="p">(</span><span class="n">GenericStreamingAPI</span><span class="p">):</span>
+    <span class="n">site_name</span> <span class="o">=</span> <span class="s2">"&lt;name&gt;"</span>
+    <span class="n">log_label</span> <span class="o">=</span> <span class="s2">"MyService"</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_build_scraper</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">media_item</span><span class="p">:</span> <span class="n">Entries</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">GetSerieInfo</span><span class="p">(</span><span class="n">media_item</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+</code></pre></div>
+<p>This is auto-discovered the same way as the CLI module (<code>GUI/searchapp/api/__init__.py</code> scans
+the package directory) — no separate registration step. <code>GenericStreamingAPI.search()</code> and
+<code>get_series_metadata()</code> already call your CLI-side <code>search()</code>/scrapper for you; only override
+<code>_build_entry</code>/<code>_map_episode</code> if the default field mapping doesn't fit.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.indexes", "navigation.expand", "navigation.top", "search.suggest", "content.code.copy"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
